@@ -544,7 +544,8 @@ function gplaceResultHtml(cache){
 function maybeFetchGooglePlace(s){
   if(!store.apiKey) return;
   var cache = store.placesCache[s.id];
-  var fresh = cache && (Date.now() - new Date(cache.ts).getTime()) < 1000*60*60*24*30;
+  var hasPhotoField = cache && (cache.notfound || cache.photos !== undefined);
+  var fresh = hasPhotoField && (Date.now() - new Date(cache.ts).getTime()) < 1000*60*60*24*30;
   if(fresh) return;
   loadGoogleMapsScript();
   var tries = 0;
