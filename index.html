@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>下北沢ご飯マップ</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8D%9C%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --bg:#fbf6ee; --card:#ffffff; --ink:#2f2a24; --sub:#8a8074; --line:#ece3d4;
+  --accent:#e0692f; --accent-soft:#fbe3d3;
+  --visited:#e0692f; --want:#c9962b; --want-bg:#fdf3d9; --none-bg:#f1ede4; --none-ink:#948b7c;
+  --c-noodle:#d64545; --c-curry:#b98324; --c-izakaya:#8b5cf6; --c-bar:#2a78d6;
+  --c-cafe:#1baf7a; --c-chinese:#d6336c; --c-teishoku:#17a2b8; --c-other:#6c757d;
+  --shadow: 0 2px 10px rgba(60,40,20,0.08);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--ink);
+  font-family:'M PLUS Rounded 1c',-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;}
+
+/* header */
+header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;background:var(--card);border-bottom:1px solid var(--line);z-index:20;}
+header h1{font-size:17px;margin:0;font-weight:800;display:flex;align-items:center;gap:6px;}
+header .hbtns{display:flex;gap:8px;}
+.iconbtn{width:36px;height:36px;border-radius:50%;border:none;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;}
+.iconbtn:active{transform:scale(0.94);}
+
+/* search/filter bar */
+.filterbar{flex:0 0 auto;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--line);
+  display:flex;gap:6px;overflow-x:auto;z-index:15;}
+.filterbar::-webkit-scrollbar{display:none;}
+.chipsel{flex:0 0 auto;padding:6px 12px;border-radius:16px;border:1px solid var(--line);
+  background:var(--bg);font-size:12.5px;color:var(--sub);white-space:nowrap;cursor:pointer;font-family:inherit;}
+.chipsel.active{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;}
+.searchrow{flex:0 0 auto;padding:6px 12px 10px;background:var(--card);display:flex;gap:8px;}
+.searchrow input{flex:1;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;
+  font-family:inherit;background:var(--bg);color:var(--ink);}
+.searchrow select{border:1px solid var(--line);border-radius:10px;padding:8px 8px;font-size:12.5px;
+  font-family:inherit;background:var(--bg);color:var(--ink);}
+
+/* main views */
+#views{flex:1 1 auto;position:relative;overflow:hidden;}
+.view{position:absolute;inset:0;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch;}
+.view.show{display:block;}
+#mapView{overflow:hidden;}
+#leafletMap{position:absolute;inset:0;}
+
+.legend{position:absolute;left:8px;bottom:10px;background:rgba(255,255,255,0.95);border-radius:10px;
+  padding:8px 10px;font-size:10.5px;color:var(--sub);box-shadow:var(--shadow);z-index:400;line-height:1.6;max-width:150px;}
+.legend b{color:var(--ink);}
+.legdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle;}
+
+/* list view */
+.arealist{padding:10px 12px 90px;}
+.areacard{background:var(--card);border-radius:14px;box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden;}
+.areacard h3{margin:0;padding:10px 14px;font-size:13.5px;font-weight:800;background:var(--accent-soft);
+  color:#8a3a13;display:flex;justify-content:space-between;}
+.chipwrap{padding:10px 12px;display:flex;flex-wrap:wrap;gap:6px;}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:14px;font-size:12.5px;
+  border:1px solid var(--line);background:var(--none-bg);color:var(--none-ink);cursor:pointer;font-family:inherit;}
+.chip.visited{background:var(--visited);color:#fff;border-color:var(--visited);font-weight:700;}
+.chip.want{background:var(--want-bg);color:#8a6b12;border-color:var(--want);font-weight:700;}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 1.5px #fff;flex:0 0 auto;vertical-align:middle;}
+
+/* stats view */
+.statwrap{padding:14px 14px 90px;}
+.hero{background:linear-gradient(135deg,#f6935a,#e0692f);color:#fff;border-radius:16px;padding:18px;
+  margin-bottom:14px;box-shadow:var(--shadow);}
+.hero .big{font-size:34px;font-weight:800;}
+.hero .lbl{font-size:12px;opacity:0.9;}
+.tilerow{display:flex;gap:8px;margin-bottom:14px;}
+.tile{flex:1;background:var(--card);border-radius:12px;padding:10px;text-align:center;box-shadow:var(--shadow);}
+.tile .n{font-size:20px;font-weight:800;color:var(--accent);}
+.tile .l{font-size:10.5px;color:var(--sub);}
+.barrow{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12px;}
+.barrow .lb{width:110px;flex:0 0 auto;color:var(--sub);}
+.barrow .track{flex:1;height:8px;background:var(--none-bg);border-radius:4px;overflow:hidden;}
+.barrow .fill{height:100%;background:var(--accent);}
+.barrow .val{width:34px;text-align:right;color:var(--sub);font-size:11px;}
+.statwrap h4{font-size:13px;margin:16px 0 8px;color:var(--sub);}
+
+/* bottom tabs */
+#tabbar{flex:0 0 auto;display:flex;background:var(--card);border-top:1px solid var(--line);z-index:20;}
+.tab{flex:1;text-align:center;padding:9px 0 7px;font-size:11px;color:var(--sub);cursor:pointer;font-family:inherit;
+  background:none;border:none;}
+.tab .ti{font-size:19px;display:block;}
+.tab.active{color:var(--accent);font-weight:700;}
+
+/* FAB */
+#fab{position:fixed;right:16px;bottom:74px;width:52px;height:52px;border-radius:50%;background:var(--accent);
+  color:#fff;font-size:26px;border:none;box-shadow:0 4px 14px rgba(224,105,47,0.45);z-index:500;cursor:pointer;}
+#fab:active{transform:scale(0.95);}
+
+/* sheets */
+.backdrop{position:fixed;inset:0;background:rgba(30,20,10,0.35);z-index:900;display:none;}
+.backdrop.show{display:block;}
+.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;
+  max-height:82vh;overflow-y:auto;z-index:901;display:none;padding:18px 18px 26px;box-shadow:0 -4px 20px rgba(0,0,0,0.15);}
+.sheet.show{display:block;}
+.sheet h2{font-size:16px;margin:0 0 4px;font-weight:800;}
+.sheet .genre{font-size:12px;color:var(--sub);margin-bottom:10px;}
+.sheet .infoline{font-size:12.5px;color:var(--sub);margin:3px 0;line-height:1.5;}
+#sheetX{position:fixed;z-index:902;width:32px;height:32px;border-radius:50%;background:#fff;border:1px solid var(--line);
+  display:none;align-items:center;justify-content:center;font-size:15px;color:var(--sub);cursor:pointer;box-shadow:var(--shadow);}
+.actrow{display:flex;gap:8px;margin:14px 0 10px;flex-wrap:wrap;}
+.actbtn{flex:1;min-width:100px;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);
+  font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer;font-family:inherit;text-align:center;}
+.actbtn.on{background:var(--visited);color:#fff;border-color:var(--visited);}
+.actbtn.wanton{background:var(--want-bg);color:#8a6b12;border-color:var(--want);}
+.actbtn.link{background:var(--accent-soft);color:#8a3a13;text-decoration:none;display:flex;align-items:center;justify-content:center;}
+.stars{display:flex;gap:4px;margin:8px 0;}
+.star{font-size:24px;color:#ddd;cursor:pointer;}
+.star.on{color:var(--want);}
+.gplace{margin-top:12px;padding:12px;background:var(--bg);border-radius:12px;font-size:12.5px;}
+.gplace .rate{font-size:20px;font-weight:800;color:#e2a92a;}
+.gplace button{margin-top:6px;padding:7px 12px;border-radius:8px;border:none;background:var(--accent);color:#fff;
+  font-size:12px;font-family:inherit;cursor:pointer;}
+.gphotos{display:flex;gap:6px;margin-top:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.gphotos img{width:88px;height:66px;object-fit:cover;border-radius:8px;flex:0 0 auto;background:var(--none-bg);}
+.formfield{margin-bottom:10px;}
+.formfield label{display:block;font-size:11.5px;color:var(--sub);margin-bottom:4px;}
+.formfield input,.formfield select,.formfield textarea{width:100%;padding:9px 10px;border:1px solid var(--line);
+  border-radius:10px;font-size:13.5px;font-family:inherit;background:var(--bg);color:var(--ink);}
+.submitbtn{width:100%;padding:12px;border-radius:12px;border:none;background:var(--accent);color:#fff;
+  font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:6px;}
+.smallnote{font-size:11px;color:var(--sub);line-height:1.6;margin-top:6px;}
+.menuitem{padding:12px 4px;border-bottom:1px solid var(--line);font-size:14px;display:flex;align-items:center;gap:10px;cursor:pointer;}
+.menuitem:last-child{border-bottom:none;}
+.leaflet-div-icon{background:transparent;border:none;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🍜 下北沢ご飯マップ</h1>
+    <div class="hbtns">
+      <button class="iconbtn" id="btnSettings">⚙️</button>
+      <button class="iconbtn" id="btnMenu">☰</button>
+    </div>
+  </header>
+
+  <div class="filterbar" id="statusFilterBar"></div>
+  <div class="filterbar" id="catFilterBar"></div>
+  <div class="searchrow">
+    <input type="text" id="searchBox" placeholder="店名で検索...">
+    <select id="areaFilterSel"><option value="all">エリア:すべて</option></select>
+  </div>
+
+  <div id="views">
+    <div class="view show" id="mapView">
+      <div id="leafletMap"></div>
+      <div class="legend" id="mapLegend"></div>
+    </div>
+    <div class="view" id="listView"><div class="arealist" id="listWrap"></div></div>
+    <div class="view" id="statsView"><div class="statwrap" id="statsWrap"></div></div>
+  </div>
+
+  <button id="fab">＋</button>
+
+  <div id="tabbar">
+    <button class="tab active" data-tab="map"><span class="ti">🗺️</span>マップ</button>
+    <button class="tab" data-tab="list"><span class="ti">📋</span>リスト</button>
+    <button class="tab" data-tab="stats"><span class="ti">📊</span>統計</button>
+  </div>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+<button id="sheetX">✕</button>
+
+<div class="sheet" id="detailSheet"></div>
+<div class="sheet" id="addSheet"></div>
+<div class="sheet" id="settingsSheet"></div>
+<div class="sheet" id="menuSheet"></div>
+
+<script>
+window.__PRESETS__ = [{"id": "p001", "name": "純手打ち 麺と未来", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ミシュラン掲載の手打ち麺", "lat": 35.662194, "lng": 139.669894}, {"id": "p002", "name": "中華そば こてつ", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "シンプルで奥深い醤油そば", "lat": 35.663627, "lng": 139.668501}, {"id": "p003", "name": "貝麺 みかわ", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "貝出汁ラーメン専門店", "lat": 35.662295, "lng": 139.667301}, {"id": "p004", "name": "らーめん 玄", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "二郎系のがっつり系", "lat": 35.663375, "lng": 139.668865}, {"id": "p005", "name": "鶏そば そると", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "鶏白湯と冷やし担々麺", "lat": 35.663599, "lng": 139.667102}, {"id": "p006", "name": "なおちゃんラーメン", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "地元で愛される一杯", "lat": 35.662303, "lng": 139.667981}, {"id": "p007", "name": "スパイスラーメン 点と線.下北沢店", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "スパイス系の変わり種", "lat": 35.663606, "lng": 139.667884}, {"id": "p008", "name": "だるま大使 無限 下北沢店", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "濃厚豚骨系ラーメン", "lat": 35.662514, "lng": 139.668749}, {"id": "p009", "name": "中華そば みつめ", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "地元の人気ラーメン店", "lat": 35.662758, "lng": 139.669787}, {"id": "p010", "name": "一龍", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "町の中華ラーメン店", "lat": 35.66107, "lng": 139.67004}, {"id": "p011", "name": "北海道らーめん 熊源", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "北海道味噌ラーメン専門", "lat": 35.663621, "lng": 139.669099}, {"id": "p012", "name": "元祖 辛麺 桝元", "genre": "ラーメン", "category": "noodle", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "辛麺専門のピリ辛系", "lat": 35.661858, "lng": 139.667731}, {"id": "p013", "name": "カレーの店・八月", "genre": "カレー", "category": "curry", "area": "一番街", "address": "東京都世田谷区北沢2-14-19", "note": "豚骨鶏ガラのおふくろの味", "lat": 35.66182, "lng": 139.669664}, {"id": "p014", "name": "Anjali Curry Spice Foods", "genre": "カレー", "category": "curry", "area": "一番街", "address": "東京都世田谷区北沢2-15-11 センヤビルB1", "note": "インド・スリランカの融合", "lat": 35.662487, "lng": 139.66847}, {"id": "p015", "name": "Curry Spice Gelateria KALPASI", "genre": "カレー", "category": "curry", "area": "北口", "address": "東京都世田谷区北沢2-12-2 サウスウェーブ下北沢1F", "note": "スパイスカレー＆ジェラート", "lat": 35.663062, "lng": 139.669081}, {"id": "p016", "name": "旧ヤム邸 シモキタ荘", "genre": "カレー", "category": "curry", "area": "茶沢通り", "address": "東京都世田谷区代沢5-29-9 ナイスビル1F", "note": "月替り3種盛りキーマ", "lat": 35.658361, "lng": 139.665741}, {"id": "p017", "name": "スパイスキッチン ムーナ", "genre": "カレー", "category": "curry", "area": "一番街", "address": "東京都世田谷区北沢2-12-13 5F", "note": "南インド海鮮カレーセット", "lat": 35.661201, "lng": 139.670073}, {"id": "p018", "name": "カレーの惑星", "genre": "カレー", "category": "curry", "area": "北口", "address": "東京都世田谷区北沢3-34-3 石川荘1F", "note": "2種盛りのキーマカレー", "lat": 35.661057, "lng": 139.669946}, {"id": "p019", "name": "YOUNG", "genre": "カレー", "category": "curry", "area": "世田谷代田", "address": "東京都世田谷区代田5-1-16 1F", "note": "フォン・ド・ボーの欧風カレー", "lat": 35.665147, "lng": 139.67029}, {"id": "p020", "name": "ポニピリカ", "genre": "カレー", "category": "curry", "area": "一番街", "address": "東京都世田谷区北沢2-8-8 2F", "note": "700尾超のエビスープカレー", "lat": 35.661732, "lng": 139.669237}, {"id": "p021", "name": "般若", "genre": "カレー", "category": "curry", "area": "一番街", "address": "東京都世田谷区北沢2-33-6 スズキビル1F", "note": "チキン×キーマのあいがけ", "lat": 35.66157, "lng": 139.668731}, {"id": "p022", "name": "茄子おやじ", "genre": "カレー", "category": "curry", "area": "茶沢通り", "address": "東京都世田谷区代沢5-36-8 アルファビル1F", "note": "1990年創業の玉ねぎ炒め老舗", "lat": 35.656801, "lng": 139.667309}, {"id": "p023", "name": "202カリー堂", "genre": "カレー", "category": "curry", "area": "世田谷代田", "address": "東京都世田谷区代田5-34-21 ハイランド2F", "note": "甘みあるスープカレー", "lat": 35.664665, "lng": 139.673126}, {"id": "p024", "name": "バッキンガム宮殿 Suzunari", "genre": "カレー", "category": "curry", "area": "鈴なり横丁", "address": "東京都世田谷区北沢1-45-15 鈴なり横丁", "note": "昼はカレー夜はバー", "lat": 35.66266, "lng": 139.668849}, {"id": "p025", "name": "鶏と魚と炭火焼き 燈", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "食べログアワード受賞の炭火焼", "lat": 35.661187, "lng": 139.667191}, {"id": "p026", "name": "十七番地 下北沢店", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "リーズナブルな大衆酒場", "lat": 35.661482, "lng": 139.667671}, {"id": "p027", "name": "都夏 下北沢", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "人気の予約制居酒屋", "lat": 35.66148, "lng": 139.667951}, {"id": "p028", "name": "串焼きと煮野菜 下北沢の零や", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "串焼きと煮野菜が名物", "lat": 35.662609, "lng": 139.667283}, {"id": "p029", "name": "下北六角", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "予約数の多い人気酒場", "lat": 35.662995, "lng": 139.669474}, {"id": "p030", "name": "魚真 下北沢店", "genre": "居酒屋・寿司", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "海鮮とお造り、鮨も評判", "lat": 35.662235, "lng": 139.669674}, {"id": "p031", "name": "こけら", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "少人数向けの隠れ家酒場", "lat": 35.661854, "lng": 139.667867}, {"id": "p032", "name": "九州料理と旨い酒どんたく 下北沢店", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "九州料理と焼酎が充実", "lat": 35.661694, "lng": 139.66832}, {"id": "p033", "name": "焼野菜 銀河団", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "野菜の炭火焼き専門", "lat": 35.662747, "lng": 139.668937}, {"id": "p034", "name": "焼鳥とお野菜 一等星", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "焼鳥と野菜料理の酒場", "lat": 35.662879, "lng": 139.666944}, {"id": "p035", "name": "酒場たいよう", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "壱岐牛など提供する酒場", "lat": 35.662323, "lng": 139.668161}, {"id": "p036", "name": "下北酒場 こいどろぼう", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "カジュアルな大衆酒場", "lat": 35.662278, "lng": 139.668653}, {"id": "p037", "name": "カキノバル OYSTER&WAGYU 下北沢", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "牡蠣と和牛のバル", "lat": 35.663347, "lng": 139.66955}, {"id": "p038", "name": "熊本牧場直営 原田商店", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "熊本牧場直送の馬肉専門", "lat": 35.661736, "lng": 139.667694}, {"id": "p039", "name": "下北SABA食堂 佐助酒場", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "鯖料理が豊富な酒場", "lat": 35.663593, "lng": 139.668817}, {"id": "p040", "name": "落合酒店", "genre": "立ち飲み", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "老舗酒屋の立ち飲みでホッピー", "lat": 35.66126, "lng": 139.667322}, {"id": "p041", "name": "TDM 1874 下北沢", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "クラフトビールのビアバー", "lat": 35.663305, "lng": 139.669979}, {"id": "p042", "name": "シティー カントリー シティ", "genre": "カフェ・バー", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-12-13 細沢ビル4F", "note": "レコードが流れる日替わりパスタ", "lat": 35.662299, "lng": 139.668576}, {"id": "p043", "name": "梅干しサワー専門店", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "梅干しサワー専門バー", "lat": 35.662818, "lng": 139.66801}, {"id": "p044", "name": "クラフトビール量り売り TAP&GROWLER 下北沢店", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "量り売りクラフトビール", "lat": 35.661332, "lng": 139.668524}, {"id": "p045", "name": "gastropub GOZO", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ガストロパブ系ビアバー", "lat": 35.662321, "lng": 139.667065}, {"id": "p046", "name": "Fairground Bar&Wine shop 下北沢", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ワインバー兼販売店", "lat": 35.661476, "lng": 139.668829}, {"id": "p047", "name": "喜楽", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "日本酒の効いたバー", "lat": 35.663357, "lng": 139.668128}, {"id": "p048", "name": "Pero", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ワインバー", "lat": 35.661196, "lng": 139.66722}, {"id": "p049", "name": "GOOD HEAVENS !", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "隠れ家的な一軒", "lat": 35.661909, "lng": 139.66994}, {"id": "p050", "name": "シーシャカフェ&バー 花冷え", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "シーシャが楽しめるカフェバー", "lat": 35.662185, "lng": 139.667933}, {"id": "p051", "name": "ダミアン", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ワインバー", "lat": 35.662121, "lng": 139.669583}, {"id": "p052", "name": "Aサインバー2号店", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "米軍基地文化風のバー", "lat": 35.662726, "lng": 139.669513}, {"id": "p053", "name": "ノー ルーム フォー スクエアーズ", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "こだわりのカクテルバー", "lat": 35.662484, "lng": 139.669814}, {"id": "p054", "name": "バーニタス", "genre": "バー", "category": "bar", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "落ち着いた大人のバー", "lat": 35.662579, "lng": 139.668445}, {"id": "p055", "name": "トロワ・シャンブル", "genre": "喫茶店", "category": "cafe", "area": "茶沢通り", "address": "東京都世田谷区代沢5-36-14 湯浅ビル2F", "note": "1980年創業の老舗喫茶", "lat": 35.657969, "lng": 139.665871}, {"id": "p056", "name": "ラ・パレット", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-30-3 サンセルボンビル2F", "note": "紅茶と手作りケーキ", "lat": 35.661394, "lng": 139.66959}, {"id": "p057", "name": "ヴォルール・ドゥ・フルール 下北沢南店", "genre": "喫茶店", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-12-15 水内ビル2F", "note": "1979年創業の自家焙煎", "lat": 35.662714, "lng": 139.667053}, {"id": "p058", "name": "マサコ", "genre": "喫茶店", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-31-2 大久ビル2F", "note": "1953年創業のジャズ喫茶", "lat": 35.663216, "lng": 139.668391}, {"id": "p059", "name": "カフェ・ド・パルファン", "genre": "喫茶店", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-29-3 メゾン・ド・パルファン2F", "note": "ボックス席でおこもり感", "lat": 35.662888, "lng": 139.667615}, {"id": "p060", "name": "いーはとーぼ", "genre": "喫茶店", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-34-9 第一トキワビル2F", "note": "古本とレコードのある空間", "lat": 35.661229, "lng": 139.666802}, {"id": "p061", "name": "喫茶 一房", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-21-26 2F", "note": "話題のフルーツサンド", "lat": 35.663472, "lng": 139.669907}, {"id": "p062", "name": "COFFEE COUNTY TOKYO", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢1-30-3 ホーメンス北沢1F", "note": "福岡の有名店の東京初出店", "lat": 35.662444, "lng": 139.666928}, {"id": "p063", "name": "カフェ ノーチェ", "genre": "カフェ", "category": "cafe", "area": "シモキタエキウエ", "address": "東京都世田谷区北沢2-24-2 シモキタエキウエ2F", "note": "本格イタリアンとスイーツ", "lat": 35.662492, "lng": 139.668111}, {"id": "p064", "name": "KISSA 092", "genre": "喫茶店", "category": "cafe", "area": "世田谷代田", "address": "東京都世田谷区代田6-12-31 HOUSING下北沢ビル1F", "note": "SNS話題の白い喫茶プリン", "lat": 35.66402, "lng": 139.6729}, {"id": "p065", "name": "GRASS", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-21-22 2F", "note": "濃厚スイーツが評判", "lat": 35.663075, "lng": 139.667724}, {"id": "p066", "name": "狛犬珈琲", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢3-31-5", "note": "民家改装、カレーとケーキ", "lat": 35.6631, "lng": 139.668673}, {"id": "p067", "name": "tag cafe", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-12-10 サウスサイド2 2B", "note": "今と昔が混ざる雰囲気", "lat": 35.663054, "lng": 139.666734}, {"id": "p068", "name": "喫茶ネグラ", "genre": "喫茶店", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-26-13 PACKAGEONE1F", "note": "クリームソーダが豊富", "lat": 35.663286, "lng": 139.669193}, {"id": "p069", "name": "バロンデッセ", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-30-11", "note": "ラテアート専門店", "lat": 35.663154, "lng": 139.669707}, {"id": "p070", "name": "BAGEL CAFE 88", "genre": "カフェ・ベーカリー", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-27-12 林ビル1F", "note": "ベーグル専門でテラス席", "lat": 35.661347, "lng": 139.66823}, {"id": "p071", "name": "LOOK UP COFFEE", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-36-14 ガーデンテラス下北沢1F", "note": "スペシャルティコーヒー", "lat": 35.661103, "lng": 139.668777}, {"id": "p072", "name": "KISSA RAY", "genre": "喫茶店", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢3-20-13 フローラ松美1F", "note": "高級卵使用の白基調喫茶", "lat": 35.663455, "lng": 139.66984}, {"id": "p073", "name": "Jazzと喫茶 囃子", "genre": "喫茶店", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-9-22 EIKO下北ビル3F", "note": "ジャズ流れる西洋風内装", "lat": 35.661821, "lng": 139.668709}, {"id": "p074", "name": "ベアポンド エスプレッソ", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "エスプレッソの有名店", "lat": 35.662089, "lng": 139.667409}, {"id": "p075", "name": "ネイバーフッド アンド コーヒー 代沢5丁目店", "genre": "カフェ", "category": "cafe", "area": "茶沢通り", "address": "東京都世田谷区代沢5丁目", "note": "コーヒースタンド", "lat": 35.657695, "lng": 139.667559}, {"id": "p076", "name": "サンデーブランチ 下北沢店", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-29-2 フェニキアビル2F", "note": "フルーツタルトが看板", "lat": 35.66296, "lng": 139.667322}, {"id": "p077", "name": "ブルックリン ロースティング カンパニー 下北沢店", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "NY発の自家焙煎コーヒー", "lat": 35.661371, "lng": 139.669061}, {"id": "p078", "name": "胃袋にズキュン", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "和素材のおつまみ系焼菓子", "lat": 35.661942, "lng": 139.669782}, {"id": "p079", "name": "SIDEWALK COFFEE ROASTERS", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "自家焙煎コーヒー", "lat": 35.663684, "lng": 139.669185}, {"id": "p080", "name": "Waffle cafe ORANGE", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-26-21 エルフェアシティ下北沢1F", "note": "野菜練り込みワッフル専門", "lat": 35.66137, "lng": 139.668595}, {"id": "p081", "name": "トロ コーヒーアンドベーカリー", "genre": "カフェ", "category": "cafe", "area": "世田谷代田", "address": "東京都世田谷区代田5-3-1 2F", "note": "一軒家カフェ、自家製パスタ", "lat": 35.664703, "lng": 139.673392}, {"id": "p082", "name": "ブリキボタン CAFE&DINING", "genre": "カフェ", "category": "cafe", "area": "一番街", "address": "東京都世田谷区北沢2-14-7 下北沢セントラルビル2F", "note": "洋館風アトリエでキッシュ", "lat": 35.662127, "lng": 139.667317}, {"id": "p083", "name": "STABLER Shimokitazawa Meatsand", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-12-15", "note": "ボリューム牛肉サンド", "lat": 35.662975, "lng": 139.668452}, {"id": "p084", "name": "cafe garage Dogberry", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-29-16 高木ビル1F", "note": "ガレージ風、週替わりデリ", "lat": 35.662225, "lng": 139.667014}, {"id": "p085", "name": "COFFEA EXLIBRIS", "genre": "カフェ", "category": "cafe", "area": "茶沢通り", "address": "東京都世田谷区代沢5-8-16", "note": "コーヒーと自家製スイーツ", "lat": 35.656616, "lng": 139.667898}, {"id": "p086", "name": "CAFE FLIGHT LOUNGE", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2-24-5 シモキタフロント4F", "note": "駅を見渡せるカウンター席", "lat": 35.661463, "lng": 139.667518}, {"id": "p087", "name": "珉亭", "genre": "中華", "category": "chinese", "area": "一番街", "address": "東京都世田谷区北沢2-8-8", "note": "名物の赤いチャーハン", "lat": 35.661251, "lng": 139.669506}, {"id": "p088", "name": "新雪園", "genre": "中華", "category": "chinese", "area": "一番街", "address": "東京都世田谷区北沢2-9-24 博雅ビル1F", "note": "芸能人も通う水餃子", "lat": 35.661561, "lng": 139.670304}, {"id": "p089", "name": "清龍宛", "genre": "中華", "category": "chinese", "area": "北口", "address": "東京都世田谷区北沢2-25-20 下北沢北口駅前ビル2F", "note": "絶品の海鮮炒麺", "lat": 35.662291, "lng": 139.666978}, {"id": "p090", "name": "中華 丸長", "genre": "中華", "category": "chinese", "area": "茶沢通り", "address": "東京都世田谷区代沢5-6-1", "note": "茶沢通りの老舗中華そば", "lat": 35.659124, "lng": 139.665899}, {"id": "p091", "name": "美食天堂金威", "genre": "中華", "category": "chinese", "area": "一番街", "address": "東京都世田谷区北沢2-14-3 喜多ビル2F", "note": "担々麺と四川麻婆豆腐", "lat": 35.660906, "lng": 139.667757}, {"id": "p092", "name": "下北飯店", "genre": "中華", "category": "chinese", "area": "一番街", "address": "東京都世田谷区北沢2-5-10 第五マツヤビル1F", "note": "リーズナブルな町中華", "lat": 35.662406, "lng": 139.669367}, {"id": "p093", "name": "まちなか", "genre": "中華", "category": "chinese", "area": "一番街", "address": "東京都世田谷区北沢2-13-5 2F", "note": "パリパリ餃子の隠れ家", "lat": 35.661309, "lng": 139.667344}, {"id": "p094", "name": "歓迎 下北沢小田急改札前店", "genre": "中華", "category": "chinese", "area": "シモキタエキウエ", "address": "東京都世田谷区北沢2-24-2 シモキタエキウエ1F", "note": "駅直結、餃子定食が名物", "lat": 35.659936, "lng": 139.667125}, {"id": "p095", "name": "焼売のなかめ", "genre": "中華", "category": "chinese", "area": "北口", "address": "東京都世田谷区北沢2-19-15", "note": "海老焼売専門の屋台風", "lat": 35.662594, "lng": 139.667372}, {"id": "p096", "name": "克ッ 下北沢", "genre": "焼鳥", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2-33-3 第一片柳ビル1F", "note": "大山鶏の昭和レトロ焼鳥", "lat": 35.662457, "lng": 139.669828}, {"id": "p097", "name": "ブロシェット ボン ボン シン", "genre": "焼鳥", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2-33-6 サンピアビル1F", "note": "焼き鳥とワインの隠れ家", "lat": 35.663277, "lng": 139.66858}, {"id": "p098", "name": "和楽互尊", "genre": "焼鳥", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2-9-1 大新ビル2F", "note": "博多風焼き鳥のつくね", "lat": 35.661834, "lng": 139.667071}, {"id": "p099", "name": "蕎麦と鶏 はんさむ 下北沢", "genre": "焼鳥", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢3-25-1 MTビル102", "note": "甲州極み鶏とそば", "lat": 35.662497, "lng": 139.666954}, {"id": "p100", "name": "炭火焼鳥 西田屋", "genre": "焼鳥", "category": "izakaya", "area": "一番街", "address": "東京都世田谷区北沢2-12-2", "note": "銘柄鶏と鴨、鍋も人気", "lat": 35.662133, "lng": 139.668019}, {"id": "p101", "name": "焼鳥 さかえ", "genre": "焼鳥", "category": "izakaya", "area": "茶沢通り", "address": "東京都世田谷区代沢5-36-14 湯淺ビル1F", "note": "昭和からの老舗、1串150円", "lat": 35.658301, "lng": 139.665539}, {"id": "p102", "name": "下北沢っ子居酒屋 とりとんくん", "genre": "焼鳥", "category": "izakaya", "area": "一番街", "address": "東京都世田谷区北沢2-15-3 中村ビルB1F", "note": "養鶏場直送、燻製小屋あり", "lat": 35.661816, "lng": 139.669001}, {"id": "p103", "name": "三日月ロック", "genre": "焼鳥", "category": "izakaya", "area": "茶沢通り", "address": "東京都世田谷区代沢5-32-5 シェルポ下北沢2F", "note": "大分名物のとり天", "lat": 35.657979, "lng": 139.666399}, {"id": "p104", "name": "源八 本店", "genre": "焼鳥", "category": "izakaya", "area": "一番街", "address": "東京都世田谷区北沢2-13-14 ヴェルス下北沢1F", "note": "長い串で1本150円から", "lat": 35.662961, "lng": 139.670298}, {"id": "p105", "name": "てっちゃん", "genre": "焼鳥", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2-1-5", "note": "古民家リノベ、ワインセラー", "lat": 35.662355, "lng": 139.668978}, {"id": "p106", "name": "焼肉 三百屋", "genre": "焼肉", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "落ち着いた雰囲気の高級焼肉", "lat": 35.663022, "lng": 139.669712}, {"id": "p107", "name": "TORERO SHIMOKITAZAWA", "genre": "焼肉", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "牛タン、赤身肉が中心", "lat": 35.661516, "lng": 139.668049}, {"id": "p108", "name": "生ハラミ＆ネギタン焼肉 金肉屋 下北沢", "genre": "焼肉", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "生ハラミとネギタンが名物", "lat": 35.661893, "lng": 139.666951}, {"id": "p109", "name": "大衆ホルモン肉力屋 下北沢店", "genre": "焼肉", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "リーズナブルなホルモン焼肉", "lat": 35.661501, "lng": 139.667019}, {"id": "p110", "name": "ホルモン焼肉居酒屋 想-sou- 下北沢", "genre": "焼肉", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ホルモン中心の大衆焼肉", "lat": 35.662843, "lng": 139.667356}, {"id": "p111", "name": "城西苑", "genre": "焼肉", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "地元で長く続く焼肉店", "lat": 35.663554, "lng": 139.66844}, {"id": "p112", "name": "サムギョプサルと韓国屋台ベジテジや 下北沢店", "genre": "韓国料理", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "サムギョプサルと韓国屋台飯", "lat": 35.662477, "lng": 139.667148}, {"id": "p113", "name": "韓国農林水産大臣賞受賞 アス 下北沢店", "genre": "韓国料理", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "受賞歴ある本格韓国料理", "lat": 35.661322, "lng": 139.667267}, {"id": "p114", "name": "韓国食堂＆韓甘味ハヌリ", "genre": "韓国料理", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "韓国食堂と韓国風甘味", "lat": 35.661794, "lng": 139.668634}, {"id": "p115", "name": "ドンドコ 下北沢", "genre": "韓国料理", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "カジュアルな韓国料理店", "lat": 35.662105, "lng": 139.668468}, {"id": "p116", "name": "アジョシ 下北沢店", "genre": "韓国料理", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "人気の韓国料理居酒屋", "lat": 35.662705, "lng": 139.668962}, {"id": "p117", "name": "韓国料理 KOREAN DINING HAN CHEF 下北沢店", "genre": "韓国料理", "category": "izakaya", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ダイニング形式の韓国料理", "lat": 35.66266, "lng": 139.669862}, {"id": "p118", "name": "ミクスチャー", "genre": "パン", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "下北沢エリアの人気ベーカリー", "lat": 35.661398, "lng": 139.66787}, {"id": "p119", "name": "THE STANDARD BAKERS 下北沢店", "genre": "パン", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "駅近のおしゃれなベーカリー", "lat": 35.661928, "lng": 139.668373}, {"id": "p120", "name": "TOKYO VEGAN BAKES", "genre": "パン", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ヴィーガン対応ベーカリー", "lat": 35.662181, "lng": 139.667773}, {"id": "p121", "name": "シェ・リュイ 下北沢店", "genre": "パン", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "リーズナブルなカヌレが人気", "lat": 35.661816, "lng": 139.668755}, {"id": "p122", "name": "フジドッグ", "genre": "パン", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "コーヒーと合うパン", "lat": 35.661465, "lng": 139.667683}, {"id": "p123", "name": "nukumuku 下北沢駅前店", "genre": "パン", "category": "cafe", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "駅前の新しいベーカリー", "lat": 35.662684, "lng": 139.667603}, {"id": "p124", "name": "yuzuki", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "美味しい定食が評判", "lat": 35.662198, "lng": 139.668519}, {"id": "p125", "name": "黒川食堂", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "鮭フライ定食が名物", "lat": 35.663039, "lng": 139.668858}, {"id": "p126", "name": "食堂 土土土", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "カジュアルな定食処", "lat": 35.661694, "lng": 139.669693}, {"id": "p127", "name": "BOB KITCHEN", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "子ども連れに優しい定食屋", "lat": 35.661967, "lng": 139.667878}, {"id": "p128", "name": "社食堂", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "社食風の日替わり定食", "lat": 35.662942, "lng": 139.667613}, {"id": "p129", "name": "納豆工房 せんだい屋", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "納豆食べ放題が名物", "lat": 35.661175, "lng": 139.66943}, {"id": "p130", "name": "とん水", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "とんかつ専門の定食屋", "lat": 35.663208, "lng": 139.668654}, {"id": "p131", "name": "しんぱち食堂", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "焼き魚定食が充実", "lat": 35.66119, "lng": 139.668817}, {"id": "p132", "name": "クスクス ルージール", "genre": "ビストロ", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "本格フレンチビストロ", "lat": 35.662052, "lng": 139.669574}, {"id": "p133", "name": "ユリイカ", "genre": "ビストロ", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "ランチも人気のビストロ", "lat": 35.661228, "lng": 139.66835}, {"id": "p134", "name": "meso", "genre": "ビストロ", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "高級志向のフレンチ", "lat": 35.662759, "lng": 139.668813}, {"id": "p135", "name": "ホーキ星", "genre": "ビストロ", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "気軽に入れる洋食ビストロ", "lat": 35.663692, "lng": 139.669003}, {"id": "p136", "name": "大衆ビストロハルタ 下北沢店", "genre": "ビストロ", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "リーズナブルな大衆ビストロ", "lat": 35.663199, "lng": 139.66887}, {"id": "p137", "name": "グリルバルサンク", "genre": "ビストロ", "category": "other", "area": "世田谷代田", "address": "東京都世田谷区代田周辺", "note": "グリル料理のバル", "lat": 35.663612, "lng": 139.672648}, {"id": "p138", "name": "flour+water 下北沢", "genre": "ビストロ", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "パスタ中心のイタリアン", "lat": 35.663606, "lng": 139.668574}, {"id": "p139", "name": "はしり下北沢", "genre": "寿司", "category": "other", "area": "reload", "address": "東京都世田谷区北沢2-14-1 reload", "note": "ミシュラン星獲得店の新業態", "lat": 35.661279, "lng": 139.669222}, {"id": "p140", "name": "鮨 福元", "genre": "寿司", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "高級路線の本格鮨店", "lat": 35.663769, "lng": 139.668978}, {"id": "p141", "name": "栄鮨", "genre": "寿司", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "落ち着いた雰囲気の寿司店", "lat": 35.66191, "lng": 139.668566}, {"id": "p142", "name": "橘寿司", "genre": "寿司", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "90年以上続く老舗寿司店", "lat": 35.662383, "lng": 139.667945}, {"id": "p143", "name": "築地すし好 下北沢店", "genre": "寿司", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "築地仕込みの寿司チェーン", "lat": 35.66259, "lng": 139.668872}, {"id": "p144", "name": "シシュマハル", "genre": "インド・エスニック", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "本格ネパール料理店", "lat": 35.661203, "lng": 139.669923}, {"id": "p145", "name": "バビシャー（旧サハラ）", "genre": "インド・エスニック", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "インドカレーとナン", "lat": 35.66107, "lng": 139.66959}, {"id": "p146", "name": "チョップスティック", "genre": "インド・エスニック", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "本格ベトナム料理が手軽に", "lat": 35.66359, "lng": 139.667819}, {"id": "p147", "name": "バインミーバーバー", "genre": "インド・エスニック", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "本格ベトナムサンド専門", "lat": 35.661419, "lng": 139.667162}, {"id": "p148", "name": "ティッチャイ", "genre": "インド・エスニック", "category": "other", "area": "北口", "address": "東京都世田谷区北沢2丁目", "note": "18年愛される老舗タイ料理", "lat": 35.661048, "lng": 139.667158}, {"id": "p149", "name": "本の読める店 fuzkue", "genre": "カフェ", "category": "cafe", "area": "ボーナストラック", "address": "東京都世田谷区代田2-36-15 BONUS TRACK", "note": "読書に特化した飲食店", "lat": 35.66419, "lng": 139.671619}, {"id": "p150", "name": "大浪漫商店", "genre": "台湾料理", "category": "chinese", "area": "ボーナストラック", "address": "東京都世田谷区代田2-36-15 BONUS TRACK", "note": "台湾ソウルフード魯肉飯", "lat": 35.665454, "lng": 139.672003}, {"id": "p151", "name": "ADDA", "genre": "カレー・バー", "category": "curry", "area": "ボーナストラック", "address": "東京都世田谷区代田2-36-15 BONUS TRACK", "note": "昼はカレー、夜はバー", "lat": 35.66387, "lng": 139.672889}, {"id": "p152", "name": "お粥とお酒 ANDON", "genre": "定食・食堂", "category": "teishoku", "area": "ボーナストラック", "address": "東京都世田谷区代田2-36-15 BONUS TRACK", "note": "朝は本格粥、夜はおでん酒", "lat": 35.66384, "lng": 139.670591}, {"id": "p153", "name": "本屋B&B", "genre": "バー", "category": "bar", "area": "ボーナストラック", "address": "東京都世田谷区代田2-36-15 BONUS TRACK", "note": "本屋でビールが飲める", "lat": 35.66461, "lng": 139.671715}, {"id": "p154", "name": "発酵デパートメント", "genre": "その他", "category": "other", "area": "ボーナストラック", "address": "東京都世田谷区代田2-36-15 BONUS TRACK", "note": "発酵食品と現代アレンジ食", "lat": 35.664555, "lng": 139.672268}, {"id": "p155", "name": "恋する豚研究所 コロッケカフェ", "genre": "カフェ", "category": "cafe", "area": "ボーナストラック", "address": "東京都世田谷区代田2-36-15 BONUS TRACK", "note": "千葉産豚のコロッケ専門", "lat": 35.665631, "lng": 139.672956}, {"id": "p156", "name": "OSCAR", "genre": "中華", "category": "chinese", "area": "ボーナストラック", "address": "東京都世田谷区代田2-36-15 BONUS TRACK", "note": "オールヴィーガンの中華", "lat": 35.664856, "lng": 139.673637}, {"id": "p157", "name": "明天好好", "genre": "台湾料理", "category": "chinese", "area": "reload", "address": "東京都世田谷区北沢2-14-1 reload", "note": "台湾カフェ、薬膳豆花が人気", "lat": 35.661531, "lng": 139.671194}, {"id": "p158", "name": "しもきた茶苑大山", "genre": "喫茶店", "category": "cafe", "area": "reload", "address": "東京都世田谷区北沢2-14-1 reload", "note": "茶師十段の本格かき氷", "lat": 35.662982, "lng": 139.669893}, {"id": "p159", "name": "chotto", "genre": "バー", "category": "bar", "area": "reload", "address": "東京都世田谷区北沢2-14-1 reload", "note": "シーシャカフェ、ライブも開催", "lat": 35.662939, "lng": 139.668405}, {"id": "p160", "name": "FLUX CAFE", "genre": "カフェ", "category": "cafe", "area": "reload", "address": "東京都世田谷区北沢2-14-1 reload", "note": "ウェルネス志向のカフェ", "lat": 35.660847, "lng": 139.670105}, {"id": "p161", "name": "立てば天国", "genre": "立ち飲み", "category": "izakaya", "area": "reload", "address": "東京都世田谷区北沢2-14-1 reload", "note": "立ち呑みスタイルの居酒屋", "lat": 35.660704, "lng": 139.670716}, {"id": "p162", "name": "OGAWA COFFEE LABORATORY 下北沢", "genre": "カフェ", "category": "cafe", "area": "reload", "address": "東京都世田谷区北沢2-14-1 reload", "note": "京都小川珈琲のフラッグシップ", "lat": 35.663127, "lng": 139.669306}, {"id": "p163", "name": "Universal Bakes Nicome", "genre": "パン", "category": "cafe", "area": "reload", "address": "東京都世田谷区北沢2-14-1 reload", "note": "行列必至の人気ベーカリー", "lat": 35.661538, "lng": 139.669071}, {"id": "p164", "name": "都夏 本店", "genre": "居酒屋", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-29-16", "note": "契約農家の野菜と焼き鳥の店", "lat": 35.659498, "lng": 139.667769}, {"id": "p165", "name": "とぶさかな", "genre": "居酒屋", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-36-9", "note": "20年続く海鮮居酒屋", "lat": 35.658776, "lng": 139.667612}, {"id": "p166", "name": "釜焼鳥本舗おやひなや 下北沢店", "genre": "焼鳥", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-29-16", "note": "釜焼きにこだわる焼鳥専門店", "lat": 35.659099, "lng": 139.669411}, {"id": "p167", "name": "ペペロッソ", "genre": "ビストロ", "category": "other", "area": "南口", "address": "東京都世田谷区代沢2-46-7 エクセル桃井1F", "note": "イタリアン・ワインバー", "lat": 35.66101, "lng": 139.6667}, {"id": "p168", "name": "大衆酒場スシスミビ 下北沢店", "genre": "居酒屋", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-36-9 1F", "note": "寿司と炭火焼きの大衆酒場", "lat": 35.658598, "lng": 139.668504}, {"id": "p169", "name": "ホルモン青木 下北沢店", "genre": "焼肉", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-31-3 エクセレント下北沢1F", "note": "ホルモン専門の焼肉店", "lat": 35.659073, "lng": 139.667376}, {"id": "p170", "name": "串かつとお酒 でんがな 下北沢店", "genre": "居酒屋", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-31-3 エクセレント下北沢1F", "note": "串揚げとホルモンの大衆店", "lat": 35.660689, "lng": 139.667575}, {"id": "p171", "name": "RIVIERA", "genre": "ビストロ", "category": "other", "area": "南口", "address": "東京都世田谷区代沢4-7-2 萩原ビル1F", "note": "創作イタリアン料理店", "lat": 35.658583, "lng": 139.6681}, {"id": "p172", "name": "art RéG café", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢5-30-10 アール下北沢2F", "note": "ダイニングバー併設カフェ", "lat": 35.660476, "lng": 139.667077}, {"id": "p173", "name": "牛タン 夏火鉢", "genre": "焼肉", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-36-13", "note": "牛タン専門のビストロ・バル", "lat": 35.661066, "lng": 139.667969}, {"id": "p174", "name": "大衆食堂ニューヘイロー 下北沢", "genre": "定食・食堂", "category": "teishoku", "area": "南口", "address": "東京都世田谷区代沢5-32-7 小林ビル1F", "note": "昭和感ある大衆食堂スタイル", "lat": 35.660453, "lng": 139.667582}, {"id": "p175", "name": "啼寅東京", "genre": "居酒屋", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-29-9 1F", "note": "もつ焼きと焼き鳥の居酒屋", "lat": 35.660849, "lng": 139.666404}, {"id": "p176", "name": "ボンジョリーナ", "genre": "ビストロ", "category": "other", "area": "南口", "address": "東京都世田谷区代沢2-36-29", "note": "パスタとピザのイタリアン", "lat": 35.658814, "lng": 139.668907}, {"id": "p177", "name": "下北沢 焼とりダービー", "genre": "焼鳥", "category": "izakaya", "area": "南口", "address": "東京都世田谷区代沢5-32-11", "note": "焼き鳥中心の居酒屋", "lat": 35.660548, "lng": 139.668454}, {"id": "p178", "name": "謎解きカフェ 繭玉", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢2-36-21 buzzy代沢2F", "note": "謎解き体験ができるカフェ", "lat": 35.660277, "lng": 139.666788}, {"id": "p179", "name": "BAR LA FRAGANCIA", "genre": "バー", "category": "bar", "area": "南口", "address": "東京都世田谷区代沢5-19-12 カーサ関谷1F", "note": "スペイン料理のバル", "lat": 35.658958, "lng": 139.667285}, {"id": "p180", "name": "ミルヴァン フィオーリ", "genre": "ビストロ", "category": "other", "area": "南口", "address": "東京都世田谷区代沢5-32-3 下北フレーム1F", "note": "本格イタリアン料理店", "lat": 35.66036, "lng": 139.666916}, {"id": "p181", "name": "四季音", "genre": "寿司", "category": "other", "area": "南口", "address": "東京都世田谷区代沢4-38-3 ティビ代沢1F", "note": "季節感ある日本料理店", "lat": 35.659069, "lng": 139.666116}, {"id": "p182", "name": "つゆ艸", "genre": "バー", "category": "bar", "area": "南口", "address": "東京都世田谷区代沢5-32-13 露崎商店ビル1F", "note": "カフェ兼バーの隠れ家", "lat": 35.659298, "lng": 139.666221}, {"id": "p183", "name": "arvo coffee", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢2-42-10", "note": "こだわりコーヒーのカフェ", "lat": 35.6591, "lng": 139.668768}, {"id": "p184", "name": "キャルコーヒークラブ", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢5-34-19", "note": "落ち着いたコーヒー専門店", "lat": 35.660325, "lng": 139.668816}, {"id": "p185", "name": "Hawaiian Style Ohana Cafe", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢4-17-2", "note": "ハワイ料理のカフェ", "lat": 35.660915, "lng": 139.666732}, {"id": "p186", "name": "カフェ ド セット", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢5-36-11", "note": "ワインも楽しめるビストロカフェ", "lat": 35.660024, "lng": 139.66772}, {"id": "p187", "name": "シモキタシマイ", "genre": "その他", "category": "other", "area": "南口", "address": "東京都世田谷区代沢4-15-2", "note": "洋菓子とカフェの店", "lat": 35.658515, "lng": 139.667029}, {"id": "p188", "name": "オッポコーヒーアトリエ", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢4-4-3 1F", "note": "焙煎にこだわるコーヒー店", "lat": 35.660964, "lng": 139.668274}, {"id": "p189", "name": "TIME, TIME, TIME.", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢4-4-3", "note": "コーヒースタンド兼バー", "lat": 35.659578, "lng": 139.669336}, {"id": "p190", "name": "リバースデー", "genre": "パン", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢4-2-1 1F", "note": "パンとカフェの店", "lat": 35.659832, "lng": 139.668619}, {"id": "p191", "name": "PUB 440", "genre": "バー", "category": "bar", "area": "南口", "address": "東京都世田谷区代沢5-29-15 SYビル1F", "note": "カジュアルなパブ・バー", "lat": 35.65945, "lng": 139.666894}, {"id": "p192", "name": "ナチュラル クレープ 下北沢店", "genre": "その他", "category": "other", "area": "南口", "address": "東京都世田谷区代沢5-36-16", "note": "クレープ・パンケーキ専門", "lat": 35.659982, "lng": 139.667137}, {"id": "p193", "name": "イエロー カフェ", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢4-17-19 Nビル1F", "note": "ホットドッグが人気のカフェ", "lat": 35.660953, "lng": 139.667942}, {"id": "p194", "name": "patisserie KOZU", "genre": "その他", "category": "other", "area": "南口", "address": "東京都世田谷区代沢5-8-18", "note": "ケーキ専門のパティスリー", "lat": 35.658569, "lng": 139.666926}, {"id": "p195", "name": "パティスリー プレジール", "genre": "その他", "category": "other", "area": "南口", "address": "東京都世田谷区代沢4-7-3", "note": "本格ケーキのパティスリー", "lat": 35.659853, "lng": 139.668958}, {"id": "p196", "name": "Pati COFFEE&PLANTS", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢4-34-13 代沢クラブ1F", "note": "観葉植物のあるコーヒー店", "lat": 35.658551, "lng": 139.667702}, {"id": "p197", "name": "kakyo", "genre": "カフェ", "category": "cafe", "area": "南口", "address": "東京都世田谷区代沢5-28-17 102", "note": "小さな隠れ家カフェ", "lat": 35.659643, "lng": 139.667626}, {"id": "p198", "name": "香港餃子酒場 下北沢店", "genre": "中華", "category": "chinese", "area": "世田谷代田", "address": "世田谷区代田6-7-24 ルミナス1F", "note": "本格四川・餃子と飲茶の酒場", "lat": 35.663758, "lng": 139.670952}, {"id": "p199", "name": "フォルクス 世田谷代田店", "genre": "ビストロ", "category": "other", "area": "世田谷代田", "address": "世田谷区代田1-9-10", "note": "老舗ステーキ・ハンバーグ店", "lat": 35.665826, "lng": 139.670526}, {"id": "p200", "name": "IL MARE AZZURRO", "genre": "ビストロ", "category": "other", "area": "世田谷代田", "address": "世田谷区代田3-52-11 シャトルヒエイ1F", "note": "本格イタリアンレストラン", "lat": 35.666105, "lng": 139.673108}, {"id": "p201", "name": "ラ・ベファーナ 下北沢", "genre": "ビストロ", "category": "other", "area": "世田谷代田", "address": "世田谷区代田5-31-3", "note": "イタリアン・ピザバル", "lat": 35.664224, "lng": 139.672535}, {"id": "p202", "name": "Boucherie GOKITA Tokyo", "genre": "ビストロ", "category": "other", "area": "世田谷代田", "address": "世田谷区代田5-35-25 ダノイ下北沢", "note": "自家製シャルキュトリのビストロ", "lat": 35.665425, "lng": 139.673344}, {"id": "p203", "name": "latte", "genre": "カフェ", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田5-10-6 イーストコート代田1F", "note": "カフェ併設イタリアン", "lat": 35.664735, "lng": 139.673147}, {"id": "p204", "name": "coen cafe 月日", "genre": "カフェ", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田6-6-1 TOKYU REIT下北沢スクエア4F", "note": "カフェ&バー併設", "lat": 35.665906, "lng": 139.671752}, {"id": "p205", "name": "下北酒場ヤングチャチャ", "genre": "居酒屋", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田6-7-24 ルミナス1F", "note": "新感覚中華居酒屋", "lat": 35.664846, "lng": 139.67052}, {"id": "p206", "name": "Quarter Room", "genre": "バー", "category": "bar", "area": "世田谷代田", "address": "世田谷区代田5-10-7 nakahara-sou B1F", "note": "ダイニングバー・バル", "lat": 35.6636, "lng": 139.670826}, {"id": "p207", "name": "下北現像所", "genre": "カフェ", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田2-36-13", "note": "カフェ&ピザの店", "lat": 35.665054, "lng": 139.670478}, {"id": "p208", "name": "くし蔵 新代田店", "genre": "居酒屋", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田5-28-4", "note": "串揚げ・うどん居酒屋", "lat": 35.664004, "lng": 139.671587}, {"id": "p209", "name": "ヴィレッジヴァンガードダイナー下北沢", "genre": "ビストロ", "category": "other", "area": "世田谷代田", "address": "世田谷区代田6-3-1 リバブル下北沢B1F", "note": "バーガー・パンケーキ", "lat": 35.665935, "lng": 139.672161}, {"id": "p210", "name": "西佳苑", "genre": "焼肉", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田1-30-12", "note": "老舗焼肉店", "lat": 35.665461, "lng": 139.672465}, {"id": "p211", "name": "VERACE PANETTERIA GASTRONOMIA", "genre": "パン", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田3-58-7 世田谷代田キャンパス1F", "note": "イタリアン&ベーカリー", "lat": 35.666026, "lng": 139.670528}, {"id": "p212", "name": "ラーメン二郎 環七新代田店", "genre": "ラーメン", "category": "noodle", "area": "世田谷代田", "address": "世田谷区代田5-29-5", "note": "二郎系人気ラーメン店", "lat": 35.664838, "lng": 139.67078}, {"id": "p213", "name": "フグレン 羽根木公園", "genre": "カフェ", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田4-36-14 水巻ビル1F", "note": "ノルウェー発コーヒー店", "lat": 35.666283, "lng": 139.67278}, {"id": "p214", "name": "合心酉庵", "genre": "焼鳥", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田5-6-22", "note": "焼き鳥ダイニングバー", "lat": 35.664414, "lng": 139.672314}, {"id": "p215", "name": "白髭のシュークリーム工房", "genre": "スイーツ", "category": "other", "area": "世田谷代田", "address": "世田谷区代田5-3-1", "note": "トトロ型シュークリーム専門", "lat": 35.664014, "lng": 139.672566}, {"id": "p216", "name": "tambayan", "genre": "インド・エスニック", "category": "other", "area": "世田谷代田", "address": "世田谷区代田1-33-15", "note": "東南アジア料理店", "lat": 35.666135, "lng": 139.670313}, {"id": "p217", "name": "邪宗門 世田谷店", "genre": "喫茶店", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田1-31-1", "note": "老舗喫茶・甘味処", "lat": 35.663975, "lng": 139.671635}, {"id": "p218", "name": "ケムリ", "genre": "焼鳥", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田4-7-16", "note": "焼き鳥・日本酒バー", "lat": 35.665844, "lng": 139.672773}, {"id": "p219", "name": "薬膳食堂ちゃぶ膳 下北沢店", "genre": "ラーメン", "category": "noodle", "area": "世田谷代田", "address": "世田谷区代田6-16-20", "note": "薬膳ラーメン・スープカレー", "lat": 35.66376, "lng": 139.673389}, {"id": "p220", "name": "ストリーマーコーヒーカンパニー 世田谷代田店", "genre": "カフェ", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田2-31-12", "note": "ラテアート世界王者の店", "lat": 35.666339, "lng": 139.670343}, {"id": "p221", "name": "ユニバーサル ベイクスアンドカフェ", "genre": "パン", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田5-9-15", "note": "ヴィーガンパン専門店", "lat": 35.664431, "lng": 139.670826}, {"id": "p222", "name": "日記屋 月日", "genre": "喫茶店", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田2-36-12 BONUS TRACK", "note": "本と読書のブックカフェ", "lat": 35.664332, "lng": 139.671914}, {"id": "p223", "name": "せせらぎ茶屋", "genre": "定食・食堂", "category": "teishoku", "area": "世田谷代田", "address": "世田谷区代田1-39-9", "note": "そばと喫茶の食堂", "lat": 35.665181, "lng": 139.671898}, {"id": "p224", "name": "カフェ カルディーノ 世田谷代田店", "genre": "パン", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田2-18-8 1F", "note": "人気ベーカリー販売カフェ", "lat": 35.663864, "lng": 139.671454}, {"id": "p225", "name": "玄鮨", "genre": "寿司", "category": "other", "area": "世田谷代田", "address": "世田谷区代田6-29-8 第2サニーハウス1F", "note": "街の寿司店", "lat": 35.665428, "lng": 139.672581}, {"id": "p226", "name": "大林檎珈琲＆酒場", "genre": "居酒屋", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田5-1-20 まつぼっくりA", "note": "昼はカフェ夜は酒場", "lat": 35.664807, "lng": 139.67149}, {"id": "p227", "name": "イブローニュ", "genre": "ビストロ", "category": "other", "area": "世田谷代田", "address": "世田谷区代田1-30-12-102", "note": "フレンチビストロ", "lat": 35.665898, "lng": 139.672087}, {"id": "p228", "name": "炭火環七市場", "genre": "焼肉", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田4-6-21 伊藤ビル1F", "note": "炭火焼肉・郷土料理", "lat": 35.663664, "lng": 139.670771}, {"id": "p229", "name": "ENBAN TACOS", "genre": "インド・エスニック", "category": "other", "area": "世田谷代田", "address": "世田谷区代田1-34-11", "note": "タコス専門店", "lat": 35.666061, "lng": 139.673401}, {"id": "p230", "name": "カレー en", "genre": "カレー", "category": "curry", "area": "世田谷代田", "address": "世田谷区代田5-11-11 シティ代田1F", "note": "インドカレー専門店", "lat": 35.664234, "lng": 139.673044}, {"id": "p231", "name": "居酒屋ぐすく", "genre": "居酒屋", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田5-8-13", "note": "沖縄系居酒屋", "lat": 35.665208, "lng": 139.672827}, {"id": "p232", "name": "なごみ", "genre": "居酒屋", "category": "izakaya", "area": "世田谷代田", "address": "世田谷区代田4-10-20", "note": "落ち着いた和風居酒屋", "lat": 35.665983, "lng": 139.67331}, {"id": "p233", "name": "中華居酒屋 酔水", "genre": "中華", "category": "chinese", "area": "世田谷代田", "address": "世田谷区代田5-1-20", "note": "中華居酒屋", "lat": 35.664879, "lng": 139.672335}, {"id": "p234", "name": "洞洞", "genre": "スイーツ", "category": "other", "area": "世田谷代田", "address": "世田谷区代田2-36-19", "note": "こだわりドーナツ専門店", "lat": 35.665674, "lng": 139.671823}, {"id": "p235", "name": "eau,vent,soleil.", "genre": "パン", "category": "cafe", "area": "世田谷代田", "address": "世田谷区代田2-33-10", "note": "パンと洋菓子の店", "lat": 35.665528, "lng": 139.671163}, {"id": "p236", "name": "酒肴みうら 下北沢三浦鮮魚店", "genre": "居酒屋", "category": "izakaya", "area": "茶沢通り", "address": "世田谷区代沢5-8-11 ニューハイム福島1F", "note": "鮮魚店直営、旬の魚介と一杯", "lat": 35.658343, "lng": 139.667821}, {"id": "p237", "name": "カフェバー ミライヤ茶沢", "genre": "バー", "category": "bar", "area": "茶沢通り", "address": "世田谷区代沢5-6-14 前田ビル2F", "note": "レンタルスペース兼カフェバー", "lat": 35.656872, "lng": 139.666176}, {"id": "p238", "name": "かる小屋", "genre": "居酒屋", "category": "izakaya", "area": "茶沢通り", "address": "世田谷区代沢2-45-5", "note": "地元で人気の大衆居酒屋", "lat": 35.656856, "lng": 139.666359}, {"id": "p239", "name": "台湾料理 光春", "genre": "中華", "category": "chinese", "area": "茶沢通り", "address": "世田谷区代沢2-45-9", "note": "芸能人も通う台湾料理の名店", "lat": 35.658149, "lng": 139.668372}, {"id": "p240", "name": "中国料理 代沢 金威", "genre": "中華", "category": "chinese", "area": "茶沢通り", "address": "世田谷区代沢3-14-4", "note": "池ノ上の名店の2号店", "lat": 35.656676, "lng": 139.66763}, {"id": "p241", "name": "えにし 下北沢", "genre": "居酒屋", "category": "izakaya", "area": "茶沢通り", "address": "世田谷区代沢2-29-14", "note": "郷土料理・おばんざいの店", "lat": 35.658591, "lng": 139.667689}, {"id": "p242", "name": "小笹寿し", "genre": "寿司", "category": "other", "area": "茶沢通り", "address": "世田谷区代沢3-7-10", "note": "昔ながらの町の寿司店", "lat": 35.656647, "lng": 139.668103}, {"id": "p243", "name": "ダスカレー キムラレストラン", "genre": "カレー", "category": "curry", "area": "茶沢通り", "address": "世田谷区代沢2-42-8", "note": "下北沢カレー界の老舗名店", "lat": 35.657875, "lng": 139.667927}, {"id": "p244", "name": "マジックスパイス 東京店", "genre": "カレー", "category": "curry", "area": "茶沢通り", "address": "世田谷区代沢2-30-14", "note": "札幌発スープカレーの名店", "lat": 35.659057, "lng": 139.666798}, {"id": "p245", "name": "ガネーシャガル 代沢", "genre": "インド・エスニック", "category": "other", "area": "茶沢通り", "address": "世田谷区代沢4-27-9", "note": "本格インドカリー専門店", "lat": 35.657375, "lng": 139.665969}, {"id": "p246", "name": "moonbow", "genre": "カレー", "category": "curry", "area": "茶沢通り", "address": "世田谷区代沢3丁目", "note": "個性派カレーの人気店", "lat": 35.659032, "lng": 139.667947}, {"id": "p247", "name": "mint", "genre": "カレー", "category": "curry", "area": "茶沢通り", "address": "世田谷区代沢4-28-9", "note": "インド・ネパール系ダイニング", "lat": 35.658564, "lng": 139.667936}, {"id": "p248", "name": "BARandFOOD 3-SKY", "genre": "カレー", "category": "curry", "area": "茶沢通り", "address": "世田谷区代沢4-28-9", "note": "カレーとお酒を楽しめる店", "lat": 35.65921, "lng": 139.668731}, {"id": "p249", "name": "韓てら", "genre": "韓国料理", "category": "izakaya", "area": "茶沢通り", "address": "世田谷区代沢3-12-26", "note": "芸能人御用達の焼肉・韓国料理", "lat": 35.658967, "lng": 139.667415}, {"id": "p250", "name": "鮨 なか尾", "genre": "寿司", "category": "other", "area": "茶沢通り", "address": "世田谷区代沢2-36-21", "note": "こぢんまりした寿司店", "lat": 35.659239, "lng": 139.667326}, {"id": "p251", "name": "ジュウゴノニク", "genre": "その他", "category": "other", "area": "茶沢通り", "address": "世田谷区代沢5-9-1", "note": "熟成黒毛和牛弁当の専門店", "lat": 35.658224, "lng": 139.66666}, {"id": "p252", "name": "ビストロ トネリコ", "genre": "ビストロ", "category": "other", "area": "茶沢通り", "address": "世田谷区代沢2-7-9", "note": "隠れ家的な一軒家ビストロ", "lat": 35.658979, "lng": 139.66579}, {"id": "p253", "name": "十勝うまいもんバル TONOTO", "genre": "居酒屋", "category": "izakaya", "area": "茶沢通り", "address": "世田谷区代沢4-5-4", "note": "北海道・十勝食材のバル", "lat": 35.658825, "lng": 139.666364}, {"id": "p254", "name": "cafe Stay Happy", "genre": "カフェ", "category": "cafe", "area": "茶沢通り", "address": "世田谷区代沢2-29-14", "note": "オーガニック食材のカフェ", "lat": 35.658413, "lng": 139.66719}, {"id": "p255", "name": "DAN", "genre": "ビストロ", "category": "other", "area": "茶沢通り", "address": "世田谷区代沢4-34-10", "note": "本格フレンチの一軒", "lat": 35.656813, "lng": 139.668017}, {"id": "p256", "name": "Craft Beer Bar 淡島倉庫", "genre": "バー", "category": "bar", "area": "茶沢通り", "address": "世田谷区代沢4-34-12", "note": "珍しいクラフトビール専門バー", "lat": 35.659214, "lng": 139.66651}, {"id": "p257", "name": "ラ・フュメ（Bar La Fumee）", "genre": "バー", "category": "bar", "area": "茶沢通り", "address": "世田谷区代沢2-36-23", "note": "隠れ家的な一軒家バー", "lat": 35.657254, "lng": 139.66643}, {"id": "p258", "name": "tent", "genre": "カフェ", "category": "cafe", "area": "茶沢通り", "address": "世田谷区代沢5-6-14", "note": "カフェ＆ダイニングバー", "lat": 35.657352, "lng": 139.667552}, {"id": "p259", "name": "ボデギータ", "genre": "その他", "category": "other", "area": "茶沢通り", "address": "世田谷区代沢5-6-14", "note": "30年続く老舗キューバ料理店", "lat": 35.656659, "lng": 139.665814}, {"id": "p260", "name": "ラザニ屋 デリシャスファクトリー下北沢店", "genre": "ビストロ", "category": "other", "area": "茶沢通り", "address": "世田谷区代沢5-8-10", "note": "チーズたっぷりラザニア専門店", "lat": 35.656779, "lng": 139.666584}, {"id": "p261", "name": "DAIZAWA TERRACE", "genre": "カフェ", "category": "cafe", "area": "茶沢通り", "address": "世田谷区代沢4-26-9", "note": "テラス席もあるカフェ", "lat": 35.658349, "lng": 139.667546}, {"id": "p262", "name": "ブーランジュリー ラニス", "genre": "パン", "category": "cafe", "area": "茶沢通り", "address": "世田谷区代沢3丁目", "note": "小麦粉にこだわる隠れ家パン屋", "lat": 35.657353, "lng": 139.666726}, {"id": "p263", "name": "もり蕎麦太田", "genre": "その他", "category": "other", "area": "一番街", "address": "世田谷区北沢2-39-13 田丸ビル1F", "note": "一番街の老舗そば店", "lat": 35.661383, "lng": 139.668154}, {"id": "p264", "name": "蕎麦処 廣榮屋", "genre": "その他", "category": "other", "area": "一番街", "address": "世田谷区北沢3-21-1", "note": "一番街商店街の老舗そば店", "lat": 35.661011, "lng": 139.670468}, {"id": "p265", "name": "蕎麦切り正音", "genre": "その他", "category": "other", "area": "北口", "address": "世田谷区北沢2-28-1 慶水ビル1F", "note": "北口エリアの蕎麦専門店", "lat": 35.663471, "lng": 139.669883}, {"id": "p266", "name": "蕎麦処 くりはら", "genre": "その他", "category": "other", "area": "北口", "address": "世田谷区北沢4-16-10", "note": "北口の蕎麦処", "lat": 35.661627, "lng": 139.668725}, {"id": "p267", "name": "かつ良", "genre": "定食・食堂", "category": "teishoku", "area": "北口", "address": "世田谷区北沢2-3-12 友和ビルB1", "note": "昭和49年創業のとんかつ老舗", "lat": 35.661169, "lng": 139.667544}, {"id": "p268", "name": "ふるさと", "genre": "居酒屋", "category": "izakaya", "area": "北口", "address": "世田谷区北沢（あずま通り）", "note": "1970年創業の老舗大衆酒場", "lat": 35.661071, "lng": 139.668302}, {"id": "p269", "name": "マルディグラ", "genre": "喫茶店", "category": "cafe", "area": "一番街", "address": "世田谷区北沢2-31-1 サン・ローザ1F", "note": "路地裏の隠れ家喫茶", "lat": 35.663032, "lng": 139.667801}, {"id": "p270", "name": "こはぜ珈琲", "genre": "カフェ", "category": "cafe", "area": "北口", "address": "世田谷区北沢2-33-6", "note": "こだわり珈琲の人気店", "lat": 35.662812, "lng": 139.666868}, {"id": "p271", "name": "FLIPPER'S 下北沢店", "genre": "その他", "category": "other", "area": "一番街", "address": "世田谷区北沢2-26-20 1F", "note": "奇跡のパンケーキ専門店", "lat": 35.66248, "lng": 139.669954}, {"id": "p272", "name": "NORAH'S COFFEE TABLE", "genre": "カフェ", "category": "cafe", "area": "一番街", "address": "世田谷区北沢2-26-25 kuboビル1F", "note": "パンケーキが人気のカフェ", "lat": 35.660813, "lng": 139.667365}, {"id": "p273", "name": "自家製ジェラート専門店 窓からアイス", "genre": "その他", "category": "other", "area": "北口", "address": "世田谷区北沢2-21-22", "note": "濃厚なめらか自家製ジェラート", "lat": 35.662503, "lng": 139.667473}, {"id": "p274", "name": "御菓子司 青柳 北沢店", "genre": "その他", "category": "other", "area": "北口", "address": "世田谷区北沢2-1-7", "note": "老舗和菓子店、大福が人気", "lat": 35.663774, "lng": 139.669334}, {"id": "p275", "name": "大衆酒場 よっちゃん", "genre": "立ち飲み", "category": "izakaya", "area": "北口", "address": "世田谷区北沢2-17-14 下北沢センタービルB1F", "note": "せんべろで人気の立ち飲み", "lat": 35.661394, "lng": 139.669214}, {"id": "p276", "name": "tico", "genre": "立ち飲み", "category": "izakaya", "area": "北口", "address": "世田谷区北沢1-44-19", "note": "駅近くの立ち飲みバー", "lat": 35.661333, "lng": 139.669876}, {"id": "p277", "name": "ひげちょうちん", "genre": "立ち飲み", "category": "izakaya", "area": "一番街", "address": "世田谷区北沢2-19-5", "note": "気軽な角打ち系立ち飲み", "lat": 35.662414, "lng": 139.670383}, {"id": "p278", "name": "大衆酒場 晩杯屋 下北沢店", "genre": "立ち飲み", "category": "izakaya", "area": "北口", "address": "世田谷区北沢2-11-3 松居ビルB1F", "note": "せんべろ系チェーンの立ち飲み", "lat": 35.661583, "lng": 139.669197}, {"id": "p279", "name": "タイ料理研究所 下北沢店", "genre": "インド・エスニック", "category": "other", "area": "北口", "address": "世田谷区北沢2-24-2 シモキタエキウエ内", "note": "駅直結の本格タイ料理店", "lat": 35.662713, "lng": 139.667138}, {"id": "p280", "name": "タイ屋台999 下北沢店", "genre": "インド・エスニック", "category": "other", "area": "北口", "address": "世田谷区北沢2-10-20 ミカン下北内", "note": "タイの屋台を再現した人気店", "lat": 35.661592, "lng": 139.669751}, {"id": "p281", "name": "チョップスティックス 下北沢店", "genre": "インド・エスニック", "category": "other", "area": "北口", "address": "世田谷区北沢2丁目", "note": "生米麺フォーが人気のベトナム店", "lat": 35.661698, "lng": 139.669285}, {"id": "p282", "name": "なんばん亭 下北沢店", "genre": "その他", "category": "other", "area": "北口", "address": "世田谷区北沢2-12-3 石川ビル2F", "note": "神泡達人店のお好み焼き店", "lat": 35.66132, "lng": 139.669097}, {"id": "p283", "name": "せっちゃん", "genre": "その他", "category": "other", "area": "一番街", "address": "世田谷区北沢2-33-6 第2ミチルビル1F", "note": "一番街の鉄板焼き・もんじゃ店", "lat": 35.663017, "lng": 139.669494}];
+</script>
+<script>
+(function(){
+"use strict";
+
+var STORE_KEY = "shimokita_gohan_map_v1";
+var CATEGORY_LABEL = {
+  noodle:"麺・ラーメン", curry:"カレー", izakaya:"居酒屋・酒場・焼鳥焼肉", bar:"バー",
+  cafe:"カフェ・喫茶・パン", chinese:"中華・台湾", teishoku:"定食・食堂", other:"その他"
+};
+var CATEGORY_COLOR = {
+  noodle:"#d64545", curry:"#b98324", izakaya:"#8b5cf6", bar:"#2a78d6",
+  cafe:"#1baf7a", chinese:"#d6336c", teishoku:"#17a2b8", other:"#6c757d"
+};
+
+function loadStore(){
+  try{
+    var raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return {v:1, custom:[], records:{}, hidden:[], apiKey:"", placesCache:{}};
+    var d = JSON.parse(raw);
+    d.custom = d.custom || []; d.records = d.records || {}; d.hidden = d.hidden || [];
+    d.apiKey = d.apiKey || ""; d.placesCache = d.placesCache || {};
+    return d;
+  }catch(e){ return {v:1, custom:[], records:{}, hidden:[], apiKey:"", placesCache:{}}; }
+}
+function saveStore(){ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }
+
+var store = loadStore();
+var PRESETS = (window.__PRESETS__ || []);
+var hiddenSet = {}; (store.hidden||[]).forEach(function(id){hiddenSet[id]=true;});
+
+function allStores(){
+  var list = PRESETS.filter(function(p){return !hiddenSet[p.id];});
+  return list.concat(store.custom);
+}
+function getRecord(id){ return store.records[id] || {status:null, rating:0, lastVisit:null}; }
+function setRecord(id, patch){
+  var r = getRecord(id);
+  for(var k in patch) r[k]=patch[k];
+  store.records[id]=r; saveStore();
+}
+
+/* ---------- state ---------- */
+var state = { statusFilter:"all", areaFilter:"all", catFilter:"all", search:"", tab:"map", currentId:null };
+
+/* ---------- filter bar (status) ---------- */
+var STATUS_TABS = [
+  {key:"all", label:"すべて"}, {key:"visited", label:"✔ 行った"},
+  {key:"want", label:"★ 行きたい"}, {key:"none", label:"未訪問"}
+];
+function renderStatusBar(){
+  var el = document.getElementById("statusFilterBar");
+  el.innerHTML = "";
+  STATUS_TABS.forEach(function(t){
+    var b = document.createElement("button");
+    b.className = "chipsel" + (state.statusFilter===t.key ? " active":"");
+    b.textContent = t.label;
+    b.onclick = function(){ state.statusFilter=t.key; renderStatusBar(); renderAll(); };
+    el.appendChild(b);
+  });
+}
+
+function renderCatBar(){
+  var el = document.getElementById("catFilterBar");
+  el.innerHTML = "";
+  var all = document.createElement("button");
+  all.className = "chipsel" + (state.catFilter==="all" ? " active":"");
+  all.textContent = "ジャンル:すべて";
+  all.onclick = function(){ state.catFilter="all"; renderCatBar(); renderAll(); };
+  el.appendChild(all);
+  Object.keys(CATEGORY_LABEL).forEach(function(k){
+    var b = document.createElement("button");
+    b.className = "chipsel" + (state.catFilter===k ? " active":"");
+    b.innerHTML = '<span class="dot" style="background:'+CATEGORY_COLOR[k]+'"></span> '+CATEGORY_LABEL[k];
+    b.onclick = function(){ state.catFilter=k; renderCatBar(); renderAll(); };
+    el.appendChild(b);
+  });
+}
+
+function renderAreaSelect(){
+  var sel = document.getElementById("areaFilterSel");
+  var areas = {};
+  allStores().forEach(function(s){ areas[s.area]=true; });
+  var cur = sel.value || "all";
+  sel.innerHTML = '<option value="all">エリア:すべて</option>';
+  Object.keys(areas).sort().forEach(function(a){
+    var o = document.createElement("option"); o.value=a; o.textContent=a; sel.appendChild(o);
+  });
+  sel.value = cur;
+}
+
+function filteredStores(){
+  var q = state.search.trim().toLowerCase();
+  return allStores().filter(function(s){
+    var rec = getRecord(s.id);
+    var st = rec.status || "none";
+    if(state.statusFilter!=="all" && st!==state.statusFilter) return false;
+    if(state.areaFilter!=="all" && s.area!==state.areaFilter) return false;
+    if(state.catFilter!=="all" && s.category!==state.catFilter) return false;
+    if(q && s.name.toLowerCase().indexOf(q)===-1 && (s.genre||"").toLowerCase().indexOf(q)===-1) return false;
+    return true;
+  });
+}
+
+/* ---------- map ---------- */
+var map, markerLayer;
+function initMap(){
+  map = L.map("leafletMap", {zoomControl:true}).setView([35.6613,139.6683], 16);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+  }).addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+  renderMapLegend();
+}
+function statusColorFor(rec){
+  var st = rec.status || "none";
+  if(st==="visited") return "#e0692f";
+  if(st==="want") return "#c9962b";
+  return "#bdb4a4";
+}
+function makeIcon(s, rec){
+  var cc = CATEGORY_COLOR[s.category]||"#999";
+  var sc = statusColorFor(rec);
+  var mark = rec.status==="visited" ? "✔" : (rec.status==="want" ? "★" : "");
+  return L.divIcon({
+    className:"",
+    html:'<div style="position:relative;width:22px;height:22px;">'+
+      '<div style="width:22px;height:22px;border-radius:50%;background:'+sc+';border:2.5px solid '+cc+';'+
+      'box-shadow:0 1px 4px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;'+
+      'color:#fff;font-size:11px;font-weight:800;">'+mark+'</div></div>',
+    iconSize:[22,22], iconAnchor:[11,11]
+  });
+}
+function renderMap(){
+  if(!map) return;
+  markerLayer.clearLayers();
+  filteredStores().forEach(function(s){
+    var rec = getRecord(s.id);
+    var m = L.marker([s.lat,s.lng], {icon: makeIcon(s,rec)});
+    m.on("click", function(){ openDetail(s.id); });
+    m.bindTooltip(s.name, {direction:"top", offset:[0,-10]});
+    markerLayer.addLayer(m);
+  });
+}
+function renderMapLegend(){
+  var el = document.getElementById("mapLegend");
+  el.innerHTML = '<div><b>状態</b>　'+
+    '<span class="legdot" style="background:#e0692f"></span>行った　'+
+    '<span class="legdot" style="background:#c9962b"></span>行きたい　'+
+    '<span class="legdot" style="background:#bdb4a4"></span>未訪問</div>'+
+    '<div style="margin-top:3px;"><b>枠色=ジャンル</b>（詳細タップで確認）</div>';
+}
+
+/* ---------- list ---------- */
+function cityKeyOf(s){ return s.area || "その他"; }
+function renderList(){
+  var wrap = document.getElementById("listWrap");
+  var list = filteredStores();
+  var groups = {};
+  list.forEach(function(s){
+    var k = cityKeyOf(s);
+    (groups[k] = groups[k]||[]).push(s);
+  });
+  var keys = Object.keys(groups).sort(function(a,b){ return groups[b].length - groups[a].length; });
+  if(keys.length===0){ wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--sub);font-size:13px;">該当するお店がありません</div>'; return; }
+  var html = "";
+  keys.forEach(function(k){
+    html += '<div class="areacard"><h3>'+esc(k)+' <span>'+groups[k].length+'件</span></h3><div class="chipwrap">';
+    groups[k].sort(function(a,b){return a.name.localeCompare(b.name,"ja");}).forEach(function(s){
+      var rec = getRecord(s.id);
+      var st = rec.status||"none";
+      var cls = st==="visited" ? "chip visited" : (st==="want" ? "chip want" : "chip");
+      var mark = st==="visited" ? "✔ " : (st==="want" ? "★ " : "");
+      html += '<span class="'+cls+'" data-id="'+s.id+'" onclick="window.__openDetail(\''+s.id+'\')">'+
+        '<span class="dot" style="background:'+(CATEGORY_COLOR[s.category]||"#999")+'"></span>'+mark+esc(s.name)+'</span>';
+    });
+    html += '</div></div>';
+  });
+  wrap.innerHTML = html;
+}
+
+/* ---------- stats ---------- */
+function renderStats(){
+  var wrap = document.getElementById("statsWrap");
+  var all = allStores();
+  var visited = all.filter(function(s){return (getRecord(s.id).status||"none")==="visited";});
+  var want = all.filter(function(s){return (getRecord(s.id).status||"none")==="want";});
+  var pct = all.length ? Math.round(visited.length/all.length*100) : 0;
+
+  var byCat = {};
+  all.forEach(function(s){ byCat[s.category]=byCat[s.category]||{total:0,visited:0}; byCat[s.category].total++;
+    if((getRecord(s.id).status||"none")==="visited") byCat[s.category].visited++; });
+
+  var byArea = {};
+  all.forEach(function(s){ var k=s.area; byArea[k]=byArea[k]||{total:0,visited:0}; byArea[k].total++;
+    if((getRecord(s.id).status||"none")==="visited") byArea[k].visited++; });
+
+  var favs = all.filter(function(s){ return getRecord(s.id).rating>=4; })
+    .sort(function(a,b){ return getRecord(b.id).rating - getRecord(a.id).rating; });
+
+  var html = '<div class="hero"><div class="lbl">下北沢制覇率</div><div class="big">'+pct+'%</div>'+
+    '<div class="lbl">'+visited.length+' / '+all.length+' 件 行った</div></div>';
+  html += '<div class="tilerow">'+
+    '<div class="tile"><div class="n">'+visited.length+'</div><div class="l">✔ 行った</div></div>'+
+    '<div class="tile"><div class="n">'+want.length+'</div><div class="l">★ 行きたい</div></div>'+
+    '<div class="tile"><div class="n">'+(all.length-visited.length-want.length)+'</div><div class="l">未訪問</div></div>'+
+    '</div>';
+
+  html += '<h4>ジャンル別</h4>';
+  Object.keys(byCat).sort(function(a,b){return byCat[b].total-byCat[a].total;}).forEach(function(k){
+    var d = byCat[k]; var p = d.total? Math.round(d.visited/d.total*100):0;
+    html += '<div class="barrow"><div class="lb">'+(CATEGORY_LABEL[k]||k)+'</div>'+
+      '<div class="track"><div class="fill" style="width:'+p+'%;background:'+(CATEGORY_COLOR[k]||"#999")+'"></div></div>'+
+      '<div class="val">'+d.visited+'/'+d.total+'</div></div>';
+  });
+
+  html += '<h4>エリア別</h4>';
+  Object.keys(byArea).sort(function(a,b){return byArea[b].total-byArea[a].total;}).forEach(function(k){
+    var d = byArea[k]; var p = d.total? Math.round(d.visited/d.total*100):0;
+    html += '<div class="barrow"><div class="lb">'+esc(k)+'</div>'+
+      '<div class="track"><div class="fill" style="width:'+p+'%"></div></div>'+
+      '<div class="val">'+d.visited+'/'+d.total+'</div></div>';
+  });
+
+  html += '<h4>お気に入り（★4以上）</h4>';
+  if(favs.length===0){ html += '<div class="smallnote">まだありません。詳細シートで★評価をつけてみましょう。</div>'; }
+  else { html += '<div class="chipwrap" style="padding:0;">'; favs.slice(0,30).forEach(function(s){
+      html += '<span class="chip visited" onclick="window.__openDetail(\''+s.id+'\')">'+esc(s.name)+'</span>';
+    }); html += '</div>'; }
+
+  wrap.innerHTML = html;
+}
+
+/* ---------- render dispatch ---------- */
+function renderAll(){
+  renderAreaSelect();
+  renderMap();
+  renderList();
+  renderStats();
+}
+
+/* ---------- detail sheet ---------- */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+function gmapsUrl(s){
+  var q = encodeURIComponent(s.name + " " + (s.address||"下北沢"));
+  return "https://www.google.com/maps/search/?api=1&query="+q;
+}
+
+function openDetail(id){
+  state.currentId = id;
+  var s = allStores().filter(function(x){return x.id===id;})[0];
+  if(!s) return;
+  var rec = getRecord(id);
+  var st = rec.status||"none";
+  var stars = "";
+  for(var i=1;i<=5;i++){ stars += '<span class="star'+(rec.rating>=i?" on":"")+'" data-v="'+i+'">★</span>'; }
+
+  var html = '<h2>'+esc(s.name)+'</h2>';
+  html += '<div class="genre"><span class="dot" style="background:'+(CATEGORY_COLOR[s.category]||"#999")+'"></span> '+esc(s.genre)+' ・ '+esc(s.area)+'</div>';
+  if(s.address) html += '<div class="infoline">📍 '+esc(s.address)+'</div>';
+  if(s.note) html += '<div class="infoline">💬 '+esc(s.note)+'</div>';
+
+  html += '<div class="stars" id="starRow">'+stars+'</div>';
+
+  html += '<div class="actrow">'+
+    '<button class="actbtn'+(st==="visited"?" on":"")+'" id="btnVisited">✔ 行った</button>'+
+    '<button class="actbtn'+(st==="want"?" wanton":"")+'" id="btnWant">★ 行きたい</button>'+
+    '</div>';
+  html += '<div class="actrow">'+
+    '<a class="actbtn link" href="'+gmapsUrl(s)+'" target="_blank" rel="noopener">🗺️ Googleマップで開く</a>'+
+    '</div>';
+
+  html += '<div class="gplace" id="gplaceBox">'+gplaceInitialHtml(id)+'</div>';
+
+  if(store.custom.some(function(c){return c.id===id;})){
+    html += '<div class="actrow"><button class="actbtn" id="btnDeleteCustom" style="color:#c0392b;">🗑 このお店を削除</button></div>';
+  } else {
+    html += '<div class="actrow"><button class="actbtn" id="btnHidePreset">🙈 リストから非表示にする</button></div>';
+  }
+
+  document.getElementById("detailSheet").innerHTML = html;
+  showSheet("detailSheet");
+
+  document.getElementById("btnVisited").onclick = function(){
+    var cur = getRecord(id).status;
+    setRecord(id, {status: cur==="visited" ? null : "visited", lastVisit: new Date().toISOString().slice(0,10)});
+    openDetail(id); renderAll();
+  };
+  document.getElementById("btnWant").onclick = function(){
+    var cur = getRecord(id).status;
+    setRecord(id, {status: cur==="want" ? null : "want"});
+    openDetail(id); renderAll();
+  };
+  document.querySelectorAll("#starRow .star").forEach(function(el){
+    el.onclick = function(){
+      var v = parseInt(el.getAttribute("data-v"),10);
+      var cur = getRecord(id).rating;
+      setRecord(id, {rating: cur===v ? 0 : v});
+      openDetail(id);
+    };
+  });
+  var delBtn = document.getElementById("btnDeleteCustom");
+  if(delBtn) delBtn.onclick = function(){
+    if(!confirm("このお店を削除しますか？")) return;
+    store.custom = store.custom.filter(function(c){return c.id!==id;});
+    delete store.records[id]; saveStore(); hideSheets(); renderAll();
+  };
+  var hideBtn = document.getElementById("btnHidePreset");
+  if(hideBtn) hideBtn.onclick = function(){
+    if(!confirm("このお店をリストから非表示にしますか？（メニューから復活できます）")) return;
+    store.hidden.push(id); hiddenSet[id]=true; saveStore(); hideSheets(); renderAll();
+  };
+
+  maybeFetchGooglePlace(s);
+}
+window.__openDetail = openDetail;
+
+/* ---------- Google Places integration ---------- */
+var googleReady = false;
+var placesService = null;
+function loadGoogleMapsScript(){
+  if(!store.apiKey || googleReady || document.getElementById("gmapsSdk")) return;
+  var s = document.createElement("script");
+  s.id = "gmapsSdk";
+  s.src = "https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(store.apiKey)+"&libraries=places&callback=__onGmapsReady";
+  s.async = true;
+  document.head.appendChild(s);
+}
+window.__onGmapsReady = function(){
+  googleReady = true;
+  try{ placesService = new google.maps.places.PlacesService(document.createElement("div")); }catch(e){}
+};
+
+function gplaceInitialHtml(id){
+  var cache = store.placesCache[id];
+  if(!store.apiKey){
+    return '<div class="smallnote">Google評価の自動表示には⚙️設定からAPIキーの登録が必要です。</div>';
+  }
+  if(cache){
+    return gplaceResultHtml(cache);
+  }
+  return '<div class="smallnote">Google評価を取得中...</div>';
+}
+function gplaceResultHtml(cache){
+  if(cache.notfound) return '<div class="smallnote">Googleマップ上で該当する店舗情報が見つかりませんでした。</div>';
+  var html = '<span class="rate">★ '+(cache.rating!=null?cache.rating:"-")+'</span> ';
+  html += '<span style="color:var(--sub);">('+(cache.total||0)+'件のレビュー)</span>';
+  if(cache.photos && cache.photos.length){
+    html += '<div class="gphotos">';
+    cache.photos.forEach(function(url){
+      html += '<img src="'+esc(url)+'" loading="lazy" onerror="this.style.display=\'none\'">';
+    });
+    html += '</div>';
+  }
+  html += '<div class="smallnote">Google取得: '+cache.ts+'</div>';
+  return html;
+}
+function maybeFetchGooglePlace(s){
+  if(!store.apiKey) return;
+  var cache = store.placesCache[s.id];
+  var fresh = cache && (Date.now() - new Date(cache.ts).getTime()) < 1000*60*60*24*30;
+  if(fresh) return;
+  loadGoogleMapsScript();
+  var tries = 0;
+  var timer = setInterval(function(){
+    tries++;
+    if(googleReady && placesService){
+      clearInterval(timer);
+      placesService.findPlaceFromQuery({
+        query: s.name + " " + (s.area||"") + " 下北沢",
+        fields: ["place_id","name","rating","user_ratings_total","photos"]
+      }, function(results, status){
+        var box = document.getElementById("gplaceBox");
+        if(status === google.maps.places.PlacesServiceStatus.OK && results && results[0]){
+          var r = results[0];
+          var photoUrls = [];
+          try{
+            if(r.photos && r.photos.length){
+              photoUrls = r.photos.slice(0,3).map(function(p){
+                return p.getUrl({maxWidth:400, maxHeight:300});
+              });
+            }
+          }catch(e){}
+          store.placesCache[s.id] = {rating:r.rating, total:r.user_ratings_total, place_id:r.place_id, photos:photoUrls, ts:new Date().toISOString()};
+        } else {
+          store.placesCache[s.id] = {notfound:true, ts:new Date().toISOString()};
+        }
+        saveStore();
+        if(box && state.currentId===s.id) box.innerHTML = gplaceResultHtml(store.placesCache[s.id]);
+      });
+    } else if(tries>60){ clearInterval(timer); }
+  }, 250);
+}
+
+/* ---------- add store sheet ---------- */
+function openAddSheet(){
+  var html = '<h2>お店を追加</h2>';
+  html += '<div class="formfield"><label>店名</label><input id="afName" type="text" placeholder="店名"></div>';
+  html += '<div class="formfield"><label>ジャンル分類</label><select id="afCat">';
+  Object.keys(CATEGORY_LABEL).forEach(function(k){ html += '<option value="'+k+'">'+CATEGORY_LABEL[k]+'</option>'; });
+  html += '</select></div>';
+  html += '<div class="formfield"><label>ジャンル（自由入力）</label><input id="afGenre" type="text" placeholder="例：ラーメン、カフェ"></div>';
+  html += '<div class="formfield"><label>エリア</label><input id="afArea" type="text" placeholder="例：北口、茶沢通り" value="北口"></div>';
+  html += '<div class="formfield"><label>住所（任意）</label><input id="afAddr" type="text" placeholder="住所"></div>';
+  html += '<div class="formfield"><label>メモ（任意）</label><input id="afNote" type="text" placeholder="メモ"></div>';
+  html += '<div class="smallnote">位置は下北沢駅周辺にランダム配置されます。あとで地図の精度を気にする場合はGoogleマップで住所を確認してください。</div>';
+  html += '<button class="submitbtn" id="afSubmit">追加する</button>';
+  document.getElementById("addSheet").innerHTML = html;
+  showSheet("addSheet");
+  document.getElementById("afSubmit").onclick = function(){
+    var name = document.getElementById("afName").value.trim();
+    if(!name){ alert("店名を入力してください"); return; }
+    var cat = document.getElementById("afCat").value;
+    var genre = document.getElementById("afGenre").value.trim() || CATEGORY_LABEL[cat];
+    var area = document.getElementById("afArea").value.trim() || "北口";
+    var addr = document.getElementById("afAddr").value.trim();
+    var note = document.getElementById("afNote").value.trim();
+    var base = [35.6613,139.6683];
+    var id = "c" + Date.now();
+    var jitterLat = base[0] + (Math.random()-0.5)*0.004;
+    var jitterLng = base[1] + (Math.random()-0.5)*0.005;
+    store.custom.push({id:id, name:name, genre:genre, category:cat, area:area, address:addr, note:note, lat:jitterLat, lng:jitterLng});
+    saveStore(); hideSheets(); renderAll();
+  };
+}
+
+/* ---------- settings sheet ---------- */
+function openSettings(){
+  var html = '<h2>⚙️ 設定</h2>';
+  html += '<div class="formfield"><label>Google Places APIキー（任意）</label>'+
+    '<input id="stApiKey" type="text" placeholder="AIza..." value="'+esc(store.apiKey||"")+'"></div>';
+  html += '<div class="smallnote">お店の詳細を開いた時にGoogleの★評価・レビュー件数・お店の写真を自動取得して表示します。'+
+    'キーはこの端末のブラウザ内だけに保存され、Google以外には送信されません。'+
+    '取得にはGoogle Cloudで「Maps JavaScript API」と「Places API」を有効化したAPIキーが必要です（キー未設定でも地図・記録機能は使えます）。</div>';
+  html += '<button class="submitbtn" id="stSave">保存</button>';
+  document.getElementById("settingsSheet").innerHTML = html;
+  showSheet("settingsSheet");
+  document.getElementById("stSave").onclick = function(){
+    store.apiKey = document.getElementById("stApiKey").value.trim();
+    store.placesCache = {}; googleReady = false; placesService = null;
+    var old = document.getElementById("gmapsSdk"); if(old) old.remove();
+    saveStore(); hideSheets(); alert("保存しました");
+  };
+}
+
+/* ---------- menu sheet ---------- */
+function openMenu(){
+  var html = '<h2>メニュー</h2>';
+  html += '<div class="menuitem" id="mnExport">⬇️ データをエクスポート</div>';
+  html += '<div class="menuitem" id="mnImport">⬆️ データをインポート</div>';
+  html += '<div class="menuitem" id="mnRestore">🙈 非表示にした店を復活</div>';
+  html += '<div class="menuitem" id="mnAbout">ℹ️ このツールについて</div>';
+  document.getElementById("menuSheet").innerHTML = html;
+  showSheet("menuSheet");
+  document.getElementById("mnExport").onclick = function(){
+    var blob = new Blob([JSON.stringify(store,null,1)], {type:"application/json"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "shimokita_gohan_map_" + new Date().toISOString().slice(0,10) + ".json";
+    a.click();
+  };
+  document.getElementById("mnImport").onclick = function(){
+    var inp = document.createElement("input"); inp.type="file"; inp.accept="application/json";
+    inp.onchange = function(){
+      var f = inp.files[0]; if(!f) return;
+      var r = new FileReader();
+      r.onload = function(){
+        try{
+          var d = JSON.parse(r.result);
+          store = d; store.custom = store.custom||[]; store.records = store.records||{};
+          store.hidden = store.hidden||[]; store.apiKey = store.apiKey||""; store.placesCache = store.placesCache||{};
+          hiddenSet = {}; store.hidden.forEach(function(id){hiddenSet[id]=true;});
+          saveStore(); hideSheets(); renderAll(); alert("インポートしました");
+        }catch(e){ alert("読み込みに失敗しました"); }
+      };
+      r.readAsText(f);
+    };
+    inp.click();
+  };
+  document.getElementById("mnRestore").onclick = function(){
+    store.hidden = []; hiddenSet = {}; saveStore(); renderAll(); alert("非表示店舗をすべて復活しました");
+  };
+  document.getElementById("mnAbout").onclick = function(){
+    alert("下北沢ご飯マップ\n\n行った・行きたい・未訪問のお店を地図とリストで管理する個人用ツールです。\n\nプリセット店舗は下北沢エリアのWeb情報をもとに調査したものです。座標は住所・エリア名からの近似配置のため、実際の位置と多少ずれる場合があります。\n\nGoogle評価・写真の自動表示は⚙️設定でAPIキーを登録すると有効になります。");
+  };
+}
+
+/* ---------- sheets show/hide ---------- */
+function showSheet(id){
+  document.querySelectorAll(".sheet").forEach(function(s){ s.classList.remove("show"); });
+  document.getElementById(id).classList.add("show");
+  document.getElementById("backdrop").classList.add("show");
+  requestAnimationFrame(positionSheetClose);
+}
+function hideSheets(){
+  document.querySelectorAll(".sheet").forEach(function(s){ s.classList.remove("show"); });
+  document.getElementById("backdrop").classList.remove("show");
+  document.getElementById("sheetX").style.display = "none";
+}
+function positionSheetClose(){
+  var open = document.querySelector(".sheet.show");
+  var x = document.getElementById("sheetX");
+  if(!open){ x.style.display="none"; return; }
+  var r = open.getBoundingClientRect();
+  x.style.display = "flex";
+  x.style.top = (r.top + 10) + "px";
+  x.style.right = "16px";
+  x.style.left = "auto";
+}
+window.addEventListener("resize", positionSheetClose);
+document.getElementById("backdrop").onclick = hideSheets;
+document.getElementById("sheetX").onclick = hideSheets;
+document.addEventListener("keydown", function(e){ if(e.key==="Escape") hideSheets(); });
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab").forEach(function(t){
+  t.onclick = function(){
+    document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
+    t.classList.add("active");
+    var tab = t.getAttribute("data-tab");
+    state.tab = tab;
+    document.querySelectorAll(".view").forEach(function(v){v.classList.remove("show");});
+    document.getElementById(tab+"View").classList.add("show");
+    if(tab==="map" && map){ setTimeout(function(){ map.invalidateSize(); }, 50); }
+  };
+});
+
+/* ---------- top controls ---------- */
+document.getElementById("btnSettings").onclick = openSettings;
+document.getElementById("btnMenu").onclick = openMenu;
+document.getElementById("fab").onclick = openAddSheet;
+document.getElementById("searchBox").oninput = function(e){ state.search = e.target.value; renderAll(); };
+document.getElementById("areaFilterSel").onchange = function(e){ state.areaFilter = e.target.value; renderAll(); };
+
+/* ---------- init ---------- */
+renderStatusBar();
+renderCatBar();
+initMap();
+renderAll();
+if(store.apiKey) loadGoogleMapsScript();
+
+})();
+</script>
+</body>
+</html>
