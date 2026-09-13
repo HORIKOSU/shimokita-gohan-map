@@ -233,12 +233,12 @@ var CATEGORY_COLOR = {
 function loadStore(){
   try{
     var raw = localStorage.getItem(STORE_KEY);
-    if(!raw) return {v:1, custom:[], records:{}, hidden:[], apiKey:"", placesCache:{}};
+    if(!raw) return {v:1, custom:[], records:{}, hidden:[], apiKey:"", placesCache:{}, geoCache:{}};
     var d = JSON.parse(raw);
     d.custom = d.custom || []; d.records = d.records || {}; d.hidden = d.hidden || [];
-    d.apiKey = d.apiKey || ""; d.placesCache = d.placesCache || {};
+    d.apiKey = d.apiKey || ""; d.placesCache = d.placesCache || {}; d.geoCache = d.geoCache || {};
     return d;
-  }catch(e){ return {v:1, custom:[], records:{}, hidden:[], apiKey:"", placesCache:{}}; }
+  }catch(e){ return {v:1, custom:[], records:{}, hidden:[], apiKey:"", placesCache:{}, geoCache:{}}; }
 }
 function saveStore(){ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }
 
@@ -399,13 +399,18 @@ window.__toggleWantFromMap = function(id){
   }
   renderList(); renderStats();
 };
+function effectiveLatLng(s){
+  var g = store.geoCache[s.id];
+  if(g && typeof g.lat === "number" && typeof g.lng === "number") return [g.lat, g.lng];
+  return [s.lat, s.lng];
+}
 function renderMap(){
   if(!map) return;
   markerLayer.clearLayers();
   markersById = {};
   filteredStores().forEach(function(s){
     var rec = getRecord(s.id);
-    var m = L.marker([s.lat,s.lng], {icon: makeIcon(s,rec)});
+    var m = L.marker(effectiveLatLng(s), {icon: makeIcon(s,rec)});
     m.bindPopup(mapPopupHtml(s.id), {closeButton:true, maxWidth:220});
     m.bindTooltip(s.name, {permanent:true, direction:"right", offset:[10,0], className:"maptip"});
     markerLayer.addLayer(m);
@@ -727,6 +732,15 @@ function openAddSheet(){
 }
 
 /* ---------- settings sheet ---------- */
+function geocodeStats(){
+  var list = allStores();
+  var withAddr = 0, cached = 0;
+  list.forEach(function(s){
+    if(s.address && s.address.trim()) withAddr++;
+    if(store.geoCache[s.id]) cached++;
+  });
+  return {total:list.length, withAddr:withAddr, cached:cached};
+}
 function openSettings(){
   var html = '<h2>⚙️ 設定</h2>';
   html += '<div class="formfield"><label>Google Places APIキー（任意）</label>'+
@@ -735,6 +749,14 @@ function openSettings(){
     'キーはこの端末のブラウザ内だけに保存され、Google以外には送信されません。'+
     '取得にはGoogle Cloudで「Maps JavaScript API」と「Places API」を有効化したAPIキーが必要です（キー未設定でも地図・記録機能は使えます）。</div>';
   html += '<button class="submitbtn" id="stSave">保存</button>';
+  if(store.apiKey){
+    var gstat = geocodeStats();
+    html += '<div class="formfield" style="margin-top:18px;"><label>正確な位置情報の取得（試験運用）</label>'+
+      '<div class="smallnote">現在の地図ピンはエリアごとの目安位置＋ランダムなずらしです。住所が登録されている店舗（'+gstat.withAddr+'/'+gstat.total+'件）はGoogleの住所検索（Geocoding API）で本来の位置に補正できます。取得済み: '+gstat.cached+'件。'+
+      '実行にはGoogle CloudでAPIキーに「Geocoding API」も有効化されている必要があります（未取得の店舗のみ対象、1回きりでこの端末に保存・月10,000件まで無料）。</div>'+
+      '<button class="submitbtn" id="stGeocode" style="margin-top:8px;background:var(--ink);">住所から位置を取得する</button>'+
+      '<div class="smallnote" id="stGeocodeStatus" style="margin-top:6px;"></div></div>';
+  }
   document.getElementById("settingsSheet").innerHTML = html;
   showSheet("settingsSheet");
   document.getElementById("stSave").onclick = function(){
@@ -743,6 +765,69 @@ function openSettings(){
     var old = document.getElementById("gmapsSdk"); if(old) old.remove();
     saveStore(); hideSheets(); alert("保存しました");
   };
+  var geocodeBtn = document.getElementById("stGeocode");
+  if(geocodeBtn) geocodeBtn.onclick = runGeocodeBatch;
+}
+
+/* ---------- Geocoding（住所→正確な緯度経度） ---------- */
+function runGeocodeBatch(){
+  if(!store.apiKey){ alert("先にAPIキーを登録してください"); return; }
+  var targets = allStores().filter(function(s){
+    return s.address && s.address.trim() && !store.geoCache[s.id];
+  });
+  var statusEl = document.getElementById("stGeocodeStatus");
+  var btn = document.getElementById("stGeocode");
+  if(targets.length === 0){
+    if(statusEl) statusEl.textContent = "取得対象がありません（住所ありの店舗はすべて取得済みです）";
+    return;
+  }
+  if(btn) btn.disabled = true;
+  var i = 0, okCount = 0, skipCount = 0, errCount = 0, deniedStop = false;
+  function finish(){
+    if(btn) btn.disabled = false;
+    saveStore();
+    if(statusEl){
+      statusEl.textContent = deniedStop
+        ? "中止しました：Geocoding APIが有効化されていない可能性があります（Google CloudでAPIキーの「Geocoding API」を有効にしてください）"
+        : "完了：位置を補正"+okCount+"件／精度不足のため現状維持"+skipCount+"件／通信エラー"+errCount+"件";
+    }
+    renderMap();
+  }
+  function step(){
+    if(deniedStop || i >= targets.length){ finish(); return; }
+    var s = targets[i];
+    var addr = s.address.trim();
+    var q = (addr.indexOf("世田谷区") >= 0 || addr.indexOf("東京都") >= 0) ? addr : ("東京都世田谷区" + addr);
+    var url = "https://maps.googleapis.com/maps/api/geocode/json?address=" + encodeURIComponent(q) +
+      "&bounds=35.645,139.655|35.680,139.690&region=jp&key=" + encodeURIComponent(store.apiKey);
+    if(statusEl) statusEl.textContent = "取得中...（" + (i+1) + "/" + targets.length + "）";
+    fetch(url).then(function(r){ return r.json(); }).then(function(data){
+      if(data.status === "REQUEST_DENIED"){
+        deniedStop = true;
+      } else if(data.status === "OK" && data.results && data.results[0]){
+        var res = data.results[0];
+        var loc = res.geometry.location;
+        var ltype = res.geometry.location_type;
+        if(ltype === "ROOFTOP" || ltype === "RANGE_INTERPOLATED" || ltype === "GEOMETRIC_CENTER"){
+          store.geoCache[s.id] = {lat:loc.lat, lng:loc.lng, precision:ltype, ts:new Date().toISOString()};
+          okCount++;
+        } else {
+          store.geoCache[s.id] = {skipped:true, reason:ltype, ts:new Date().toISOString()};
+          skipCount++;
+        }
+      } else {
+        store.geoCache[s.id] = {skipped:true, reason:(data.status||"ERROR"), ts:new Date().toISOString()};
+        skipCount++;
+      }
+    }).catch(function(){
+      errCount++;
+    }).then(function(){
+      i++;
+      if(i % 20 === 0) saveStore();
+      setTimeout(step, 120);
+    });
+  }
+  step();
 }
 
 /* ---------- menu sheet ---------- */
@@ -770,7 +855,7 @@ function openMenu(){
         try{
           var d = JSON.parse(r.result);
           store = d; store.custom = store.custom||[]; store.records = store.records||{};
-          store.hidden = store.hidden||[]; store.apiKey = store.apiKey||""; store.placesCache = store.placesCache||{};
+          store.hidden = store.hidden||[]; store.apiKey = store.apiKey||""; store.placesCache = store.placesCache||{}; store.geoCache = store.geoCache||{};
           hiddenSet = {}; store.hidden.forEach(function(id){hiddenSet[id]=true;});
           saveStore(); hideSheets(); renderAll(); alert("インポートしました");
         }catch(e){ alert("読み込みに失敗しました"); }
@@ -783,7 +868,7 @@ function openMenu(){
     store.hidden = []; hiddenSet = {}; saveStore(); renderAll(); alert("非表示店舗をすべて復活しました");
   };
   document.getElementById("mnAbout").onclick = function(){
-    alert("下北沢ご飯マップ\n\n行った・行きたい・未訪問のお店を地図とリストで管理する個人用ツールです。\n\nプリセット店舗は下北沢エリアのWeb情報をもとに調査したものです。座標は住所・エリア名からの近似配置のため、実際の位置と多少ずれる場合があります。\n\nGoogle評価・写真の自動表示は⚙️設定でAPIキーを登録すると有効になります。\n\n地図右上の📍ボタンで現在地を表示できます（ブラウザの位置情報アクセスの許可が必要です）。");
+    alert("下北沢ご飯マップ\n\n行った・行きたい・未訪問のお店を地図とリストで管理する個人用ツールです。\n\nプリセット店舗は下北沢エリアのWeb情報をもとに調査したものです。座標は住所・エリア名からの近似配置のため、実際の位置と多少ずれる場合があります（⚙️設定から住所をもとに位置を補正できます）。\n\nGoogle評価・写真の自動表示は⚙️設定でAPIキーを登録すると有効になります。\n\n地図右上の📍ボタンで現在地を表示できます（ブラウザの位置情報アクセスの許可が必要です）。");
   };
 }
 
