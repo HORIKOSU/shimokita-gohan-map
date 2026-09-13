@@ -328,10 +328,18 @@ function initMap(){
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
   }).addTo(map);
-  // マーカークラスタリング：店舗が密集していても数字バッジにまとめ、ズームすると自動で分割される
+  // マーカークラスタリング：店舗が密集していても数字バッジにまとめ、ズームすると自動で分割される。
+  // maxClusterRadiusをズームレベルに応じて縮める関数にすることで、最大ズームでも「本当にごく近接した
+  // 店舗（一番街など密集エリア）」は小さな数字バッジのままにして、店名ラベルの重なりを防ぐ
+  // （disableClusteringAtZoomで特定ズームから強制的に個別表示にすると、密集エリアだけラベルが
+  // 重なって見づらくなっていたため、固定ズームでの解除ではなく距離ベースの解除に変更）
   markerLayer = L.markerClusterGroup({
-    maxClusterRadius: 60,
-    disableClusteringAtZoom: LABEL_ZOOM,
+    maxClusterRadius: function(zoom){
+      if(zoom >= 19) return 22;
+      if(zoom >= 18) return 34;
+      if(zoom >= 17) return 48;
+      return 70;
+    },
     showCoverageOnHover: false,
     spiderfyOnMaxZoom: true
   }).addTo(map);
